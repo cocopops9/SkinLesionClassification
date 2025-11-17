@@ -153,24 +153,148 @@ class ImageValidator:
     def _compute_color_entropy(self, img: np.ndarray) -> float:
         """
         Compute color entropy as measure of color distribution.
-        
+
         Args:
             img: Input image
-        
+
         Returns:
             Entropy value
         """
         # Quantize colors to reduce computational complexity
         img_quant = (img // 32) * 32
-        
+
         # Compute color histogram
         unique, counts = np.unique(img_quant.reshape(-1, 3), axis=0, return_counts=True)
         probabilities = counts / counts.sum()
-        
+
         # Compute entropy
         entropy = -np.sum(probabilities * np.log2(probabilities + 1e-10))
-        
+
         return entropy
+
+    def detect_uniform_regions(self, img: np.ndarray) -> Dict[str, float]:
+        """
+        Detect presence of uniform color regions (characteristic of skin lesion images).
+        Skin lesion images typically have large areas of uniform skin color.
+
+        Args:
+            img: Input image in RGB format
+
+        Returns:
+            Dictionary with uniform region metrics
+        """
+        # Convert to LAB for better color similarity detection
+        lab = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)
+
+        # Apply bilateral filter to reduce noise while keeping edges
+        filtered = cv2.bilateralFilter(lab, 9, 75, 75)
+
+        # Compute local color variance using a sliding window approach
+        # Resize for efficiency
+        scale = min(200 / img.shape[0], 200 / img.shape[1], 1.0)
+        if scale < 1.0:
+            small = cv2.resize(filtered, None, fx=scale, fy=scale)
+        else:
+            small = filtered
+
+        # Calculate local standard deviation
+        kernel_size = 15
+        local_mean = cv2.blur(small.astype(np.float32), (kernel_size, kernel_size))
+        local_sqr_mean = cv2.blur((small.astype(np.float32) ** 2), (kernel_size, kernel_size))
+        local_variance = local_sqr_mean - local_mean ** 2
+        local_std = np.sqrt(np.maximum(local_variance, 0))
+
+        # Average local standard deviation across all LAB channels
+        avg_local_std = np.mean(local_std)
+
+        # Use color quantization to find dominant colors
+        pixels = img.reshape(-1, 3).astype(np.float32)
+
+        # K-means clustering to find dominant colors
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
+        k = 5  # Number of dominant colors to find
+
+        # Sample pixels for efficiency
+        if len(pixels) > 10000:
+            indices = np.random.choice(len(pixels), 10000, replace=False)
+            sample_pixels = pixels[indices]
+        else:
+            sample_pixels = pixels
+
+        _, labels, centers = cv2.kmeans(sample_pixels, k, None, criteria, 3, cv2.KMEANS_PP_CENTERS)
+
+        # Calculate percentage of pixels in each cluster
+        unique_labels, counts = np.unique(labels, return_counts=True)
+        percentages = counts / len(labels)
+
+        # Largest uniform region percentage
+        largest_region_pct = np.max(percentages)
+
+        # Check if top 2 colors dominate (typical for skin + lesion)
+        sorted_pcts = np.sort(percentages)[::-1]
+        top2_coverage = sorted_pcts[0] + sorted_pcts[1] if len(sorted_pcts) > 1 else sorted_pcts[0]
+
+        return {
+            'avg_local_std': avg_local_std,
+            'largest_region_pct': largest_region_pct,
+            'top2_coverage': top2_coverage,
+            'color_spread': np.std(percentages)
+        }
+
+    def analyze_texture_uniformity(self, img: np.ndarray) -> Dict[str, float]:
+        """
+        Analyze texture uniformity to detect non-skin images.
+        Natural skin has specific texture patterns different from random images.
+
+        Args:
+            img: Input image in RGB format
+
+        Returns:
+            Dictionary with texture metrics
+        """
+        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+
+        # Compute Laplacian variance (measure of focus/texture)
+        laplacian = cv2.Laplacian(gray, cv2.CV_64F)
+        laplacian_var = laplacian.var()
+
+        # Compute gradient magnitude
+        sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+        sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+        gradient_mag = np.sqrt(sobelx**2 + sobely**2)
+
+        # Statistics of gradient
+        gradient_mean = np.mean(gradient_mag)
+        gradient_std = np.std(gradient_mag)
+
+        # Coefficient of variation (normalized measure of texture variation)
+        gradient_cv = gradient_std / (gradient_mean + 1e-10)
+
+        # Check for periodic patterns (common in non-natural images)
+        # Use FFT to detect strong frequency components
+        f_transform = np.fft.fft2(gray)
+        f_shift = np.fft.fftshift(f_transform)
+        magnitude_spectrum = np.abs(f_shift)
+
+        # Ratio of high-frequency to low-frequency content
+        h, w = magnitude_spectrum.shape
+        center_h, center_w = h // 2, w // 2
+
+        # Low frequency region (center)
+        low_freq_region = magnitude_spectrum[center_h-10:center_h+10, center_w-10:center_w+10]
+        low_freq_energy = np.sum(low_freq_region ** 2)
+
+        # High frequency region (outer)
+        high_freq_energy = np.sum(magnitude_spectrum ** 2) - low_freq_energy
+
+        freq_ratio = high_freq_energy / (low_freq_energy + 1e-10)
+
+        return {
+            'laplacian_var': laplacian_var,
+            'gradient_mean': gradient_mean,
+            'gradient_cv': gradient_cv,
+            'freq_ratio': freq_ratio
+        }
     
     def classify_with_mobilenet(self, img: np.ndarray) -> Tuple[bool, float, str]:
         """
@@ -290,30 +414,77 @@ class ImageValidator:
         
         # Check 5: Color statistics
         color_stats = self.analyze_color_statistics(img)
-        
+
         # Check for unnatural images (cartoons, drawings)
         if color_stats['unique_colors'] < 100:
             results['is_valid'] = False
             results['reasons'].append("Image appears to be a drawing or cartoon (too few unique colors)")
             results['confidence'] *= 0.2
             return results
-        
+
         # Check for overly saturated images (likely non-medical)
         if color_stats['mean_saturation'] > 200:
             results['warnings'].append("Image has unusually high saturation")
             results['confidence'] *= 0.8
-        
+
         # Check edge density (text or technical drawings have high edge density)
         if color_stats['edge_density'] > 0.3:
             results['warnings'].append("High edge density detected")
             results['confidence'] *= 0.85
-        
+
+        # Check 6: Uniform color regions (critical for skin lesion detection)
+        uniform_stats = self.detect_uniform_regions(img)
+
+        # Skin lesion images should have dominant uniform regions
+        if uniform_stats['largest_region_pct'] < 0.15:
+            results['is_valid'] = False
+            results['reasons'].append(
+                f"No uniform color areas detected ({uniform_stats['largest_region_pct']*100:.1f}% largest region). "
+                "Skin lesion images should have visible skin background."
+            )
+            results['confidence'] *= 0.3
+            return results
+
+        # Top 2 colors should cover at least 40% of the image
+        if uniform_stats['top2_coverage'] < 0.40:
+            results['is_valid'] = False
+            results['reasons'].append(
+                f"Image too colorful/busy ({uniform_stats['top2_coverage']*100:.1f}% top-2 color coverage). "
+                "Skin lesion images have more uniform color distribution."
+            )
+            results['confidence'] *= 0.3
+            return results
+
+        # High local color variance indicates non-uniform/noisy image
+        if uniform_stats['avg_local_std'] > 35:
+            results['warnings'].append(
+                f"High color variation detected (local std: {uniform_stats['avg_local_std']:.1f})"
+            )
+            results['confidence'] *= 0.7
+
+        # Check 7: Texture uniformity analysis
+        texture_stats = self.analyze_texture_uniformity(img)
+
+        # Very high frequency ratio indicates unnatural patterns
+        if texture_stats['freq_ratio'] > 50:
+            results['warnings'].append("Unusual texture patterns detected")
+            results['confidence'] *= 0.75
+
+        # Very high gradient coefficient of variation indicates chaotic texture
+        if texture_stats['gradient_cv'] > 3.0:
+            results['is_valid'] = False
+            results['reasons'].append(
+                "Image texture too irregular for skin lesion imagery"
+            )
+            results['confidence'] *= 0.4
+            return results
+
         # Final validation
         if results['confidence'] < 0.5:
             results['is_valid'] = False
             if not results['reasons']:
                 results['reasons'].append("Image characteristics inconsistent with skin lesion imagery")
-        
+
         return results
     
     def generate_validation_report(self, validation_results: Dict[str, any]) -> str:
