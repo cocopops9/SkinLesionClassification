@@ -432,11 +432,11 @@ class ImageValidator:
             results['warnings'].append("High edge density detected")
             results['confidence'] *= 0.85
 
-        # Check 6: Uniform color regions (critical for skin lesion detection)
+        # Check 6: Uniform color regions (helps detect non-skin images)
         uniform_stats = self.detect_uniform_regions(img)
 
-        # Skin lesion images should have dominant uniform regions
-        if uniform_stats['largest_region_pct'] < 0.15:
+        # Only reject extremely fragmented images (very low threshold)
+        if uniform_stats['largest_region_pct'] < 0.08:
             results['is_valid'] = False
             results['reasons'].append(
                 f"No uniform color areas detected ({uniform_stats['largest_region_pct']*100:.1f}% largest region). "
@@ -445,8 +445,8 @@ class ImageValidator:
             results['confidence'] *= 0.3
             return results
 
-        # Top 2 colors should cover at least 40% of the image
-        if uniform_stats['top2_coverage'] < 0.40:
+        # Only reject extremely busy/colorful images
+        if uniform_stats['top2_coverage'] < 0.25:
             results['is_valid'] = False
             results['reasons'].append(
                 f"Image too colorful/busy ({uniform_stats['top2_coverage']*100:.1f}% top-2 color coverage). "
@@ -455,23 +455,23 @@ class ImageValidator:
             results['confidence'] *= 0.3
             return results
 
-        # High local color variance indicates non-uniform/noisy image
-        if uniform_stats['avg_local_std'] > 35:
+        # Warn on high local color variance but don't reject
+        if uniform_stats['avg_local_std'] > 50:
             results['warnings'].append(
                 f"High color variation detected (local std: {uniform_stats['avg_local_std']:.1f})"
             )
-            results['confidence'] *= 0.7
+            results['confidence'] *= 0.85
 
         # Check 7: Texture uniformity analysis
         texture_stats = self.analyze_texture_uniformity(img)
 
         # Very high frequency ratio indicates unnatural patterns
-        if texture_stats['freq_ratio'] > 50:
+        if texture_stats['freq_ratio'] > 100:
             results['warnings'].append("Unusual texture patterns detected")
-            results['confidence'] *= 0.75
+            results['confidence'] *= 0.85
 
-        # Very high gradient coefficient of variation indicates chaotic texture
-        if texture_stats['gradient_cv'] > 3.0:
+        # Only reject extremely chaotic textures
+        if texture_stats['gradient_cv'] > 5.0:
             results['is_valid'] = False
             results['reasons'].append(
                 "Image texture too irregular for skin lesion imagery"
