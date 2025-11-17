@@ -20,7 +20,8 @@ DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'melanoma_app.db')}"
 
 Base = declarative_base()
 engine = create_engine(DATABASE_URL, echo=False, connect_args={'check_same_thread': False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# expire_on_commit=False prevents DetachedInstanceError when accessing objects after session close
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, expire_on_commit=False)
 
 
 class User(Base):
@@ -123,12 +124,14 @@ class DatabaseManager:
                 raise ValueError("Username must be at least 3 characters")
             if not email or '@' not in email:
                 raise ValueError("Invalid email address")
-            
+
             user = User(username=username, email=email)
             user.set_password(password)
             session.add(user)
             session.commit()
             session.refresh(user)
+            # Expunge to detach from session before closing
+            session.expunge(user)
             return user
         except IntegrityError:
             session.rollback()
@@ -148,6 +151,8 @@ class DatabaseManager:
             if user and user.verify_password(password):
                 user.last_login = datetime.utcnow()
                 session.commit()
+                # Expunge to detach from session before closing
+                session.expunge(user)
                 return user
             return None
         finally:
@@ -165,6 +170,8 @@ class DatabaseManager:
             session.add(record)
             session.commit()
             session.refresh(record)
+            # Expunge to detach from session before closing
+            session.expunge(record)
             return record
         except Exception as e:
             session.rollback()
@@ -177,9 +184,13 @@ class DatabaseManager:
         """Retrieve user's image history."""
         session = SessionLocal()
         try:
-            return session.query(ImageRecord).filter_by(
+            records = session.query(ImageRecord).filter_by(
                 user_id=user_id
             ).order_by(ImageRecord.upload_time.desc()).limit(limit).all()
+            # Expunge all records to detach from session before closing
+            for record in records:
+                session.expunge(record)
+            return records
         finally:
             session.close()
     
@@ -188,10 +199,14 @@ class DatabaseManager:
         """Retrieve specific image record with user validation."""
         session = SessionLocal()
         try:
-            return session.query(ImageRecord).filter_by(
-                id=image_id, 
+            record = session.query(ImageRecord).filter_by(
+                id=image_id,
                 user_id=user_id
             ).first()
+            if record:
+                # Expunge to detach from session before closing
+                session.expunge(record)
+            return record
         finally:
             session.close()
 
