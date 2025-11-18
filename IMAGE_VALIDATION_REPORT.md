@@ -345,6 +345,7 @@ The RGBA/RGB fix removed a "bug" that was partially helping validation. Before t
 | 6 | Cats/dogs only (40%) | Minimal - only reject obvious pets | PARTIAL (pets only) |
 | 7 | GradCAM focus analysis | Use model attention patterns | NO IMPROVEMENT |
 | 8 | CLIP zero-shot classification | Use CLIP semantic understanding | NO IMPROVEMENT |
+| 9 | Stricter CLIP with margin | Require margin threshold, expanded prompts | NO IMPROVEMENT |
 
 ---
 
@@ -381,6 +382,39 @@ The RGBA/RGB fix removed a "bug" that was partially helping validation. Before t
 - Added torch, torchvision, clip, ftfy, regex dependencies
 - Falls back to MobileNet if CLIP not available
 - Uses softmax over similarities for probability-like scores
+
+---
+
+### Approach 9: Stricter CLIP with Margin Threshold
+
+**Strategy**: Require a confidence margin between medical and non-medical scores
+
+**Implementation**:
+- More specific medical prompts (5): dermoscopic image, clinical photograph of mole, medical dermatology image, close-up of skin with lesion, dermoscopy photograph of melanoma
+- Expanded non-medical prompts (20): cat, dog, pet, wildlife, landscape, food, screenshot, face, selfie, vehicle, building, clothing, document, electronics, toys, artwork, cartoon, plants, sports, sunset
+- Margin threshold of 0.15 required
+- Three outcomes:
+  - margin > 0.15 → Accept
+  - margin < -0.15 → Reject
+  - -0.15 ≤ margin ≤ 0.15 → Reject (ambiguous)
+
+**Why This Should Work**:
+- More specific prompts should improve discrimination
+- Margin requirement prevents borderline cases from passing
+- Expanded non-medical categories cover more invalid image types
+- Ambiguous images rejected rather than accepted
+
+**Result**: NO IMPROVEMENT - Still validates invalid images
+
+**Why It Failed**:
+- With softmax over 25 prompts, probabilities are spread thin
+- Individual strong matches get diluted in aggregate sums
+- The margin calculation doesn't capture strong individual matches
+- A clear "photo of a cat" might only get 15% probability due to dilution
+- Medical prompts may be too generic ("close-up photo of skin") matching many images
+
+**Key Insight**:
+The aggregate scoring approach is fundamentally flawed. When you have 20 non-medical prompts, each one gets a small share of the probability mass. Even a clear cat photo might only score 10-15% on "photo of a cat" because the probability is spread across all prompts.
 
 ---
 
@@ -525,7 +559,7 @@ Many medical AI systems rely on user compliance when technical limitations exist
 
 ## Conclusion
 
-After eight different approaches, **all attempts have failed** to create a reliable image validator using pre-trained models and heuristics.
+After nine different approaches, **all attempts have failed** to create a reliable image validator using pre-trained models and heuristics.
 
 ### Key Lessons Learned:
 
@@ -536,6 +570,7 @@ After eight different approaches, **all attempts have failed** to create a relia
 5. **GradCAM focus analysis** was not properly integrated and fixing errors made validation worse
 6. **Bug-as-feature**: The RGBA/RGB error was inadvertently helping validation by blocking some invalid images
 7. **CLIP zero-shot** - even semantic understanding models don't reliably distinguish medical images
+8. **Aggregate scoring** - summing probabilities dilutes strong individual matches
 
 ### The Fundamental Problem:
 
@@ -570,5 +605,5 @@ This is the **only reliable way** to achieve the goal of rejecting ALL non-medic
 
 *Report updated: 2025-11-18*
 *Project: SkinLesionClassification*
-*Approaches tested: 8*
+*Approaches tested: 9*
 *Status: No reliable solution found without custom training*

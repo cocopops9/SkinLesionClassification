@@ -72,8 +72,9 @@ class ImageValidator:
                     "a photo of a sunset or sunrise"
                 ]
 
-                # Margin threshold for stricter validation
-                self.clip_margin_threshold = 0.15
+                # Thresholds for individual prompt matching
+                self.non_medical_threshold = 0.08  # Reject if any non-medical prompt > 8%
+                self.medical_threshold = 0.12  # Accept if any medical prompt > 12%
 
                 # Pre-compute text embeddings
                 all_prompts = self.medical_prompts + self.non_medical_prompts
@@ -478,32 +479,37 @@ class ImageValidator:
                 # Apply softmax to get probabilities
                 probs = similarities.softmax(dim=-1).cpu().numpy()
 
-            # Sum probabilities for medical vs non-medical prompts
-            medical_score = float(np.sum(probs[:self.num_medical_prompts]))
-            non_medical_score = float(np.sum(probs[self.num_medical_prompts:]))
+            # Individual prompt matching approach
+            # Look at maximum probability for individual prompts, not aggregates
+            medical_probs = probs[:self.num_medical_prompts]
+            non_medical_probs = probs[self.num_medical_prompts:]
 
-            # Calculate margin between scores
-            margin = medical_score - non_medical_score
-            confidence = abs(margin)
+            max_medical_prob = float(np.max(medical_probs))
+            max_non_medical_prob = float(np.max(non_medical_probs))
 
-            # Find best matching prompts for reporting
-            best_medical_idx = np.argmax(probs[:self.num_medical_prompts])
-            best_non_medical_idx = np.argmax(probs[self.num_medical_prompts:])
+            best_medical_idx = int(np.argmax(medical_probs))
+            best_non_medical_idx = int(np.argmax(non_medical_probs))
 
-            # Stricter validation: require medical score to exceed non-medical by margin
-            # This prevents borderline cases from passing
-            if margin > self.clip_margin_threshold:
-                # Clear medical image
-                reason = f"Matches: {self.medical_prompts[best_medical_idx]} (margin: {margin:.2f})"
-                return True, confidence, reason
-            elif margin < -self.clip_margin_threshold:
-                # Clear non-medical image
-                reason = f"Detected as: {self.non_medical_prompts[best_non_medical_idx]} (margin: {-margin:.2f})"
-                return False, confidence, reason
+            # Decision logic based on individual prompt strength
+            # If any non-medical prompt has strong match, reject
+            if max_non_medical_prob > self.non_medical_threshold:
+                if max_non_medical_prob > max_medical_prob:
+                    # Clear non-medical match
+                    reason = f"Detected as: {self.non_medical_prompts[best_non_medical_idx]} ({max_non_medical_prob*100:.1f}%)"
+                    return False, max_non_medical_prob, reason
+
+            # If any medical prompt has strong match, accept
+            if max_medical_prob > self.medical_threshold:
+                reason = f"Matches: {self.medical_prompts[best_medical_idx]} ({max_medical_prob*100:.1f}%)"
+                return True, max_medical_prob, reason
+
+            # Borderline case - compare relative strengths
+            if max_medical_prob > max_non_medical_prob:
+                reason = f"Weak match: {self.medical_prompts[best_medical_idx]} ({max_medical_prob*100:.1f}%)"
+                return True, max_medical_prob, reason
             else:
-                # Ambiguous case - reject to be safe
-                reason = f"Ambiguous image (margin: {margin:.2f}, need >{self.clip_margin_threshold})"
-                return False, confidence, reason
+                reason = f"No strong medical match (best: {max_medical_prob*100:.1f}% vs {max_non_medical_prob*100:.1f}%)"
+                return False, max_non_medical_prob, reason
 
         except Exception as e:
             # If CLIP fails, fall back to accepting
