@@ -31,48 +31,59 @@ class ImageValidator:
             639: 'lab_coat'
         }
 
-        # Expanded list of classes that definitely indicate non-skin images
-        # Only reject when MobileNet is very confident (>80%)
+        # MINIMAL VALIDATION: Only reject cats and dogs
+        # These are the most common non-medical uploads and MobileNet recognizes them well
+        # All other classes removed - too unreliable
         self.non_skin_classes = {
-            # Animals - cats
+            # Cats - all cat breeds
             281: 'tabby_cat', 282: 'tiger_cat', 283: 'Persian_cat',
             284: 'Siamese_cat', 285: 'Egyptian_cat', 286: 'cougar',
-            # Animals - dogs
-            151: 'Chihuahua', 207: 'golden_retriever', 208: 'Labrador_retriever',
+            287: 'lynx', 288: 'leopard', 289: 'snow_leopard',
+            290: 'jaguar', 291: 'lion', 292: 'tiger', 293: 'cheetah',
+            # Dogs - common breeds
+            151: 'Chihuahua', 152: 'Japanese_spaniel', 153: 'Maltese_dog',
+            154: 'Pekinese', 155: 'Shih-Tzu', 156: 'Blenheim_spaniel',
+            157: 'papillon', 158: 'toy_terrier', 159: 'Rhodesian_ridgeback',
+            160: 'Afghan_hound', 161: 'basset', 162: 'beagle',
+            163: 'bloodhound', 164: 'bluetick', 165: 'black-and-tan_coonhound',
+            166: 'Walker_hound', 167: 'English_foxhound', 168: 'redbone',
+            169: 'borzoi', 170: 'Irish_wolfhound', 171: 'Italian_greyhound',
+            172: 'whippet', 173: 'Ibizan_hound', 174: 'Norwegian_elkhound',
+            175: 'otterhound', 176: 'Saluki', 177: 'Scottish_deerhound',
+            178: 'Weimaraner', 179: 'Staffordshire_bullterrier',
+            180: 'American_Staffordshire_terrier', 181: 'Bedlington_terrier',
+            182: 'Border_terrier', 183: 'Kerry_blue_terrier',
+            184: 'Irish_terrier', 185: 'Norfolk_terrier', 186: 'Norwich_terrier',
+            187: 'Yorkshire_terrier', 188: 'wire-haired_fox_terrier',
+            189: 'Lakeland_terrier', 190: 'Sealyham_terrier', 191: 'Airedale',
+            192: 'cairn', 193: 'Australian_terrier', 194: 'Dandie_Dinmont',
+            195: 'Boston_bull', 196: 'miniature_schnauzer', 197: 'giant_schnauzer',
+            198: 'standard_schnauzer', 199: 'Scotch_terrier',
+            200: 'Tibetan_terrier', 201: 'silky_terrier',
+            202: 'soft-coated_wheaten_terrier', 203: 'West_Highland_white_terrier',
+            204: 'Lhasa', 205: 'flat-coated_retriever', 206: 'curly-coated_retriever',
+            207: 'golden_retriever', 208: 'Labrador_retriever',
             209: 'Chesapeake_Bay_retriever', 210: 'German_short-haired_pointer',
-            229: 'Old_English_sheepdog', 232: 'Border_collie', 235: 'German_shepherd',
-            # Animals - other
-            30: 'bullfrog', 31: 'tree_frog', 33: 'loggerhead_turtle',
-            # Vehicles
-            407: 'ambulance', 436: 'beach_wagon', 468: 'cab',
-            511: 'convertible', 555: 'fire_engine', 609: 'jeep',
-            656: 'minivan', 675: 'motor_scooter', 717: 'pickup',
-            751: 'racer', 817: 'sports_car', 864: 'tow_truck',
-            # Food
-            924: 'guacamole', 925: 'consomme', 926: 'hot_pot',
-            927: 'trifle', 928: 'ice_cream', 929: 'ice_lolly',
-            930: 'French_loaf', 931: 'bagel', 932: 'pretzel',
-            933: 'cheeseburger', 934: 'hotdog', 935: 'mashed_potato',
-            936: 'head_cabbage', 937: 'broccoli', 938: 'cauliflower',
-            939: 'zucchini', 940: 'spaghetti_squash', 941: 'acorn_squash',
-            942: 'butternut_squash', 943: 'cucumber', 944: 'artichoke',
-            945: 'bell_pepper', 946: 'cardoon', 947: 'mushroom',
-            948: 'Granny_Smith', 949: 'strawberry', 950: 'orange',
-            951: 'lemon', 952: 'fig', 953: 'pineapple', 954: 'banana',
-            955: 'jackfruit', 956: 'custard_apple', 957: 'pomegranate',
-            # Household objects
-            504: 'coffee_mug', 505: 'coffeepot', 532: 'dining_table',
-            546: 'electric_fan', 553: 'file_cabinet', 620: 'laptop',
-            664: 'monitor', 671: 'mouse', 703: 'park_bench',
-            720: 'pill_bottle', 737: 'printer', 742: 'racket',
-            765: 'rocking_chair', 831: 'studio_couch', 832: 'stupa',
-            # Landscapes/scenes
-            970: 'alp', 971: 'bubble', 972: 'cliff', 973: 'coral_reef',
-            974: 'geyser', 975: 'lakeside', 976: 'promontory',
-            977: 'sandbar', 978: 'seashore', 979: 'valley',
-            # Buildings
-            497: 'church', 498: 'cinema', 536: 'dock', 663: 'monastery',
-            698: 'palace', 833: 'submarine', 900: 'water_tower',
+            211: 'vizsla', 212: 'English_setter', 213: 'Irish_setter',
+            214: 'Gordon_setter', 215: 'Brittany_spaniel', 216: 'clumber',
+            217: 'English_springer', 218: 'Welsh_springer_spaniel',
+            219: 'cocker_spaniel', 220: 'Sussex_spaniel', 221: 'Irish_water_spaniel',
+            222: 'kuvasz', 223: 'schipperke', 224: 'groenendael',
+            225: 'malinois', 226: 'briard', 227: 'kelpie', 228: 'komondor',
+            229: 'Old_English_sheepdog', 230: 'Shetland_sheepdog', 231: 'collie',
+            232: 'Border_collie', 233: 'Bouvier_des_Flandres', 234: 'Rottweiler',
+            235: 'German_shepherd', 236: 'Doberman', 237: 'miniature_pinscher',
+            238: 'Greater_Swiss_Mountain_dog', 239: 'Bernese_mountain_dog',
+            240: 'Appenzeller', 241: 'EntleBucher', 242: 'boxer', 243: 'bull_mastiff',
+            244: 'Tibetan_mastiff', 245: 'French_bulldog', 246: 'Great_Dane',
+            247: 'Saint_Bernard', 248: 'Eskimo_dog', 249: 'malamute',
+            250: 'Siberian_husky', 251: 'dalmatian', 252: 'affenpinscher',
+            253: 'basenji', 254: 'pug', 255: 'Leonberg', 256: 'Newfoundland',
+            257: 'Great_Pyrenees', 258: 'Samoyed', 259: 'Pomeranian',
+            260: 'chow', 261: 'keeshond', 262: 'Brabancon_griffon',
+            263: 'Pembroke', 264: 'Cardigan', 265: 'toy_poodle',
+            266: 'miniature_poodle', 267: 'standard_poodle',
+            268: 'Mexican_hairless',
         }
 
         # Remove skin detection - not reliable for medical images
@@ -335,12 +346,12 @@ class ImageValidator:
     
     def classify_with_mobilenet(self, img: np.ndarray) -> Tuple[bool, float, str]:
         """
-        Use MobileNetV2 to detect non-skin images using entropy-based analysis.
+        MINIMAL VALIDATION: Only reject clear cat/dog photos.
 
-        NEW APPROACH: Use prediction confidence distribution, not just top prediction.
-        - High confidence on blacklisted class (>50%) → REJECT
-        - Very high confidence on ANY class (>85%) → REJECT (clear object, not medical)
-        - All top-5 predictions low (<20%) → ACCEPT (MobileNet confused = unusual/medical)
+        After 5 failed approaches, this uses the simplest possible logic:
+        - Only check for cats and dogs (most common non-medical uploads)
+        - Use low threshold (40%) because MobileNet is good at these
+        - Accept everything else
 
         Args:
             img: Input image in RGB format
@@ -355,48 +366,17 @@ class ImageValidator:
 
         # Get predictions
         predictions = self.mobilenet.predict(img_array, verbose=0)
-        top_indices = np.argsort(predictions[0])[::-1][:10]
-        top_confidences = [predictions[0][idx] for idx in top_indices[:5]]
+        top_indices = np.argsort(predictions[0])[::-1][:5]
 
-        # Get top prediction info
-        top_idx = top_indices[0]
-        top_conf = predictions[0][top_idx]
-
-        # Check 1: If top prediction is a blacklisted class with moderate confidence
-        # Lower threshold (50%) for specific non-medical objects
-        if top_conf > 0.50 and top_idx in self.non_skin_classes:
-            return False, top_conf, self.non_skin_classes[top_idx]
-
-        # Check 2: If very confident about ANY class, it's a clear object
-        # Medical images shouldn't strongly match any ImageNet class
-        if top_conf > 0.85:
-            # Get class name from ImageNet labels
-            class_name = f"class_{top_idx}"
-            # Check if it's in our blacklist
-            if top_idx in self.non_skin_classes:
-                return False, top_conf, self.non_skin_classes[top_idx]
-            # Even if not blacklisted, very high confidence means clear object
-            # Only reject if it's clearly not medical-related
-            # (medical classes like band-aid, syringe are allowed)
-            if top_idx not in self.medical_classes:
-                return False, top_conf, f"clear_object_{top_idx}"
-
-        # Check 3: Entropy-based acceptance
-        # If MobileNet is very confused (all top predictions low), accept
-        # This indicates unusual content like medical images
-        max_top5 = max(top_confidences)
-        if max_top5 < 0.25:
-            # Very confused - likely unusual/medical image
-            return True, 0.0, "unknown_medical"
-
-        # Check 4: Check if any of top-10 predictions hit blacklist with decent confidence
+        # Check top-5 predictions for cats/dogs with 40% threshold
+        # Lower threshold because MobileNet is well-trained on animals
         for idx in top_indices:
             confidence = predictions[0][idx]
-            if confidence > 0.35 and idx in self.non_skin_classes:
+            if confidence > 0.40 and idx in self.non_skin_classes:
                 return False, confidence, self.non_skin_classes[idx]
 
-        # If no clear non-medical class detected, accept
-        return True, 0.0, "unknown"
+        # Accept everything else
+        return True, 0.0, "accepted"
     
     def detect_text_presence(self, img: np.ndarray) -> bool:
         """
@@ -485,7 +465,7 @@ class ImageValidator:
             img_small = cv2.resize(img, (100, 100)) if img.shape[0] > 100 else img
             unique_colors = len(np.unique(img_small.reshape(-1, 3), axis=0))
 
-            if unique_colors < 50:
+            if unique_colors < 30:  # Very strict - only catch obvious graphics
                 results['is_valid'] = False
                 results['reasons'].append(
                     f"Image appears to be a simple graphic ({unique_colors} unique colors)"

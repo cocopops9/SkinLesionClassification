@@ -231,6 +231,50 @@ This trades some false positives (accepting non-medical images) for eliminating 
 - Clinical skin photo (all classes <25%) → ACCEPT
 - Random close-up (mixed confidence) → Additional checks
 
+**Result**: NO IMPROVEMENT - Same behavior as Approach 4
+
+**Why It Failed**:
+- MobileNet confidence scores don't follow expected patterns
+- Even clear objects often have <50% top confidence
+- The entropy-based acceptance (max <25%) doesn't differentiate medical from other
+- Multiple threshold checks still don't catch the right images
+
+---
+
+### Approach 6: Minimal Validation (NEW)
+
+**Strategy**: Radically simplify - only catch the most obvious cases
+
+**Key Insight**: After 5 failed approaches, the lesson is clear:
+- We cannot reliably distinguish medical images from other content
+- Any attempt to be "smart" fails in one direction or another
+- The only reliable detections are VERY obvious cases
+
+**New Approach - Accept almost everything, reject only obvious cases**:
+
+Only reject:
+1. **Simple graphics** (<30 unique colors in 100x100 sample)
+2. **Clear animal photos** (cats/dogs ONLY with >40% confidence)
+
+That's it. No landscapes, no food, no vehicles, no entropy checks.
+
+**Rationale**:
+- Cat/dog photos are the most common non-medical uploads
+- MobileNet is trained extensively on these and has high accuracy
+- Other ImageNet classes have too much overlap with medical images
+- Lowering threshold to 40% catches more obvious cases
+
+**Expected Behavior**:
+- Cat photo → REJECT (cats are well-recognized)
+- Dog photo → REJECT (dogs are well-recognized)
+- Dermoscopic image → ACCEPT
+- Clinical photo → ACCEPT
+- Landscape → ACCEPT (unfortunate but necessary)
+- Food photo → ACCEPT (unfortunate but necessary)
+- Random object → ACCEPT
+
+**Trade-off**: Will accept some non-medical images (landscapes, food, objects) but will NOT reject valid medical images. This is the safest approach for a medical application.
+
 ---
 
 ## Root Cause Analysis (Updated)
@@ -275,20 +319,25 @@ The problem is distinguishing "MobileNet confused because medical" from "MobileN
 
 ## Conclusion
 
-After five different approaches, the key lessons are:
+After six different approaches, the key lessons are:
 
 1. **Heuristic approaches fail** because medical images are too variable
-2. **High MobileNet thresholds fail** because MobileNet is rarely confident about close-up photos
-3. **The best signal is MobileNet's confidence distribution**, not just the top prediction
+2. **MobileNet threshold approaches fail** because confidence scores are unreliable
+3. **Entropy-based approaches fail** because MobileNet doesn't produce expected patterns
+4. **The only reliable signals are very specific**: cats, dogs, and simple graphics
 
-The new entropy-based approach uses MobileNet more intelligently:
-- Reject when confident about blacklisted classes (50% threshold)
-- Reject when very confident about any non-medical class (85% threshold)
-- Accept when confused (high entropy)
+The minimal validation approach (Approach 6) accepts the reality that:
+- We cannot reliably validate medical images without a custom-trained model
+- Any "smart" approach will fail in one direction (too strict or too lenient)
+- The safest option is to only catch the most obvious non-medical content
 
-This should better separate "clear everyday objects" from "unusual/medical content."
+**For production use, the recommended solution is**:
+- Train a custom binary classifier on medical vs non-medical images
+- Use a dataset of actual user uploads (with labels)
+- This is the only way to get reliable validation
 
 ---
 
 *Report updated: 2025-11-18*
 *Project: SkinLesionClassification*
+*Approaches tested: 6*
