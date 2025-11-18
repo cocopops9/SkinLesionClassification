@@ -30,28 +30,53 @@ class ImageValidator:
             917: 'washbasin',
             639: 'lab_coat'
         }
-        
-        # Classes that definitely indicate non-skin images
+
+        # Expanded list of classes that definitely indicate non-skin images
+        # Only reject when MobileNet is very confident (>80%)
         self.non_skin_classes = {
-            # Animals
-            281: 'tabby_cat', 285: 'Egyptian_cat', 207: 'golden_retriever',
-            # Objects
-            504: 'coffee_mug', 546: 'electric_fan', 664: 'monitor',
+            # Animals - cats
+            281: 'tabby_cat', 282: 'tiger_cat', 283: 'Persian_cat',
+            284: 'Siamese_cat', 285: 'Egyptian_cat', 286: 'cougar',
+            # Animals - dogs
+            151: 'Chihuahua', 207: 'golden_retriever', 208: 'Labrador_retriever',
+            209: 'Chesapeake_Bay_retriever', 210: 'German_short-haired_pointer',
+            229: 'Old_English_sheepdog', 232: 'Border_collie', 235: 'German_shepherd',
+            # Animals - other
+            30: 'bullfrog', 31: 'tree_frog', 33: 'loggerhead_turtle',
             # Vehicles
-            817: 'sports_car', 511: 'convertible', 656: 'minivan',
+            407: 'ambulance', 436: 'beach_wagon', 468: 'cab',
+            511: 'convertible', 555: 'fire_engine', 609: 'jeep',
+            656: 'minivan', 675: 'motor_scooter', 717: 'pickup',
+            751: 'racer', 817: 'sports_car', 864: 'tow_truck',
             # Food
-            934: 'hotdog', 926: 'hot_pot', 927: 'trifle',
-            # Landscapes
-            978: 'seashore', 979: 'lakeside', 973: 'cliff'
+            924: 'guacamole', 925: 'consomme', 926: 'hot_pot',
+            927: 'trifle', 928: 'ice_cream', 929: 'ice_lolly',
+            930: 'French_loaf', 931: 'bagel', 932: 'pretzel',
+            933: 'cheeseburger', 934: 'hotdog', 935: 'mashed_potato',
+            936: 'head_cabbage', 937: 'broccoli', 938: 'cauliflower',
+            939: 'zucchini', 940: 'spaghetti_squash', 941: 'acorn_squash',
+            942: 'butternut_squash', 943: 'cucumber', 944: 'artichoke',
+            945: 'bell_pepper', 946: 'cardoon', 947: 'mushroom',
+            948: 'Granny_Smith', 949: 'strawberry', 950: 'orange',
+            951: 'lemon', 952: 'fig', 953: 'pineapple', 954: 'banana',
+            955: 'jackfruit', 956: 'custard_apple', 957: 'pomegranate',
+            # Household objects
+            504: 'coffee_mug', 505: 'coffeepot', 532: 'dining_table',
+            546: 'electric_fan', 553: 'file_cabinet', 620: 'laptop',
+            664: 'monitor', 671: 'mouse', 703: 'park_bench',
+            720: 'pill_bottle', 737: 'printer', 742: 'racket',
+            765: 'rocking_chair', 831: 'studio_couch', 832: 'stupa',
+            # Landscapes/scenes
+            970: 'alp', 971: 'bubble', 972: 'cliff', 973: 'coral_reef',
+            974: 'geyser', 975: 'lakeside', 976: 'promontory',
+            977: 'sandbar', 978: 'seashore', 979: 'valley',
+            # Buildings
+            497: 'church', 498: 'cinema', 536: 'dock', 663: 'monastery',
+            698: 'palace', 833: 'submarine', 900: 'water_tower',
         }
-        
-        # Initialize skin detection color ranges (in HSV)
-        self.skin_hsv_lower = np.array([0, 20, 20], dtype=np.uint8)
-        self.skin_hsv_upper = np.array([20, 255, 255], dtype=np.uint8)
-        
-        # Alternative skin tone range
-        self.skin_hsv_lower2 = np.array([165, 20, 20], dtype=np.uint8)
-        self.skin_hsv_upper2 = np.array([180, 255, 255], dtype=np.uint8)
+
+        # Remove skin detection - not reliable for medical images
+        # HSV ranges removed as they don't work for dermoscopic images
     
     def validate_image_dimensions(self, img: np.ndarray) -> Tuple[bool, str]:
         """
@@ -328,12 +353,13 @@ class ImageValidator:
         top_indices = np.argsort(predictions[0])[::-1][:5]
         
         # Check if any top prediction is clearly non-medical
+        # Use very high confidence threshold (80%) to avoid false rejections
         for idx in top_indices:
             confidence = predictions[0][idx]
-            if confidence > 0.5:  # Higher confidence threshold to reduce false positives
+            if confidence > 0.8:  # Very high threshold - only reject when very confident
                 if idx in self.non_skin_classes:
                     return False, confidence, self.non_skin_classes[idx]
-        
+
         # If no clear non-medical class, assume potentially valid
         return True, 0.0, "unknown"
     
@@ -369,11 +395,19 @@ class ImageValidator:
     
     def validate_image(self, img_input) -> Dict[str, any]:
         """
-        Comprehensive image validation pipeline.
-        
+        Simplified image validation pipeline.
+
+        NEW APPROACH: Only reject images when we are very confident they are
+        not medical images. This avoids false rejections of valid skin lesions.
+
+        Rejection criteria:
+        1. Invalid dimensions
+        2. MobileNet detects non-medical object with >80% confidence
+        3. Image is a simple graphic (<50 unique colors)
+
         Args:
             img_input: PIL Image or numpy array
-        
+
         Returns:
             Dictionary with validation results
         """
@@ -382,95 +416,53 @@ class ImageValidator:
             img = np.array(img_input.convert('RGB'))
         else:
             img = img_input
-        
+
         results = {
             'is_valid': True,
             'confidence': 1.0,
             'reasons': [],
             'warnings': []
         }
-        
-        # Check 1: Validate dimensions only
+
+        # Check 1: Validate dimensions
         dim_valid, dim_msg = self.validate_image_dimensions(img)
         if not dim_valid:
             results['is_valid'] = False
             results['reasons'].append(dim_msg)
-            results['confidence'] *= 0.1
+            results['confidence'] = 0.0
             return results
 
-        # Check 2: Detect text/document - only warn, don't reject
-        if self.detect_text_presence(img):
-            results['warnings'].append("Image may contain text or document-like patterns")
-            results['confidence'] *= 0.9
-
-        # Check 3: MobileNet classification - only reject with very high confidence
-        is_skin, mobilenet_conf, detected_class = self.classify_with_mobilenet(img)
-        if not is_skin and mobilenet_conf > 0.6:  # Only reject if very confident
+        # Check 2: MobileNet classification
+        # Only reject if very confident (>80%) it's a non-medical object
+        is_valid_type, mobilenet_conf, detected_class = self.classify_with_mobilenet(img)
+        if not is_valid_type:
             results['is_valid'] = False
-            results['reasons'].append(f"Image detected as '{detected_class}' with {mobilenet_conf*100:.1f}% confidence")
-            results['confidence'] *= (1 - mobilenet_conf)
-            return results
-        elif not is_skin:
-            results['warnings'].append(f"Image may be '{detected_class}' ({mobilenet_conf*100:.1f}% confidence)")
-            results['confidence'] *= 0.9
-
-        # Check 4: Skin presence detection - informational only
-        skin_ratio = self.detect_skin_presence(img)
-        if skin_ratio < 0.01:
-            results['warnings'].append(f"Very low skin-tone presence ({skin_ratio*100:.1f}%)")
-            results['confidence'] *= 0.95
-
-        # Check 5: Color statistics - very lenient
-        color_stats = self.analyze_color_statistics(img)
-
-        # Only reject obvious drawings/icons with very few colors
-        if color_stats['unique_colors'] < 30:
-            results['is_valid'] = False
-            results['reasons'].append("Image appears to be an icon or simple graphic (too few colors)")
-            results['confidence'] *= 0.2
-            return results
-
-        # Check for overly saturated images (likely non-medical) - just warn
-        if color_stats['mean_saturation'] > 200:
-            results['warnings'].append("Image has unusually high saturation")
-            results['confidence'] *= 0.98
-
-        # Check edge density - just warn
-        if color_stats['edge_density'] > 0.3:
-            results['warnings'].append("High edge density detected")
-            results['confidence'] *= 0.98
-
-        # Check 6: Uniform color regions (informational only)
-        uniform_stats = self.detect_uniform_regions(img)
-
-        # Just warn on fragmented images
-        if uniform_stats['largest_region_pct'] < 0.08:
-            results['warnings'].append(
-                f"Low uniform color areas ({uniform_stats['largest_region_pct']*100:.1f}% largest region)"
+            results['reasons'].append(
+                f"Image detected as '{detected_class}' with {mobilenet_conf*100:.1f}% confidence"
             )
-            results['confidence'] *= 0.98
+            results['confidence'] = 1.0 - mobilenet_conf
+            return results
 
-        # Just warn on busy/colorful images
-        if uniform_stats['top2_coverage'] < 0.25:
-            results['warnings'].append(
-                f"High color diversity ({uniform_stats['top2_coverage']*100:.1f}% top-2 color coverage)"
-            )
-            results['confidence'] *= 0.98
+        # Check 3: Simple graphic detection
+        # Only reject obvious icons/drawings with very few unique colors
+        try:
+            # Quantize and count unique colors
+            img_small = cv2.resize(img, (100, 100)) if img.shape[0] > 100 else img
+            unique_colors = len(np.unique(img_small.reshape(-1, 3), axis=0))
 
-        # Check 7: Texture uniformity analysis (informational only)
-        texture_stats = self.analyze_texture_uniformity(img)
+            if unique_colors < 50:
+                results['is_valid'] = False
+                results['reasons'].append(
+                    f"Image appears to be a simple graphic ({unique_colors} unique colors)"
+                )
+                results['confidence'] = 0.2
+                return results
+        except Exception:
+            # If color analysis fails, don't reject
+            pass
 
-        # Just warn on unusual patterns
-        if texture_stats['freq_ratio'] > 150:
-            results['warnings'].append("Unusual texture patterns detected")
-            results['confidence'] *= 0.98
-
-        # Final validation - extremely lenient threshold
-        if results['confidence'] < 0.2:
-            results['is_valid'] = False
-            if not results['reasons']:
-                results['reasons'].append("Image characteristics inconsistent with skin lesion imagery")
-
+        # Image passed all checks
+        results['confidence'] = 1.0
         return results
     
     def generate_validation_report(self, validation_results: Dict[str, any]) -> str:
