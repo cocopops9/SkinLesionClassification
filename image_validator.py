@@ -44,8 +44,8 @@ class ImageValidator:
                 self.medical_prompt = "a dermoscopic or clinical photograph of a skin lesion or mole"
                 self.non_medical_prompt = "a photograph that is not a medical skin image"
 
-                # Threshold: require medical to be significantly higher
-                self.binary_threshold = 0.55  # Medical must be >55% to accept
+                # Threshold: accept if medical score is higher than non-medical
+                self.binary_threshold = 0.50  # Medical must be >50% to accept
 
                 # Pre-compute text embeddings for binary comparison
                 binary_prompts = [self.medical_prompt, self.non_medical_prompt]
