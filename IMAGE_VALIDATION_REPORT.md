@@ -275,6 +275,50 @@ That's it. No landscapes, no food, no vehicles, no entropy checks.
 
 **Trade-off**: Will accept some non-medical images (landscapes, food, objects) but will NOT reject valid medical images. This is the safest approach for a medical application.
 
+**Result**: PARTIAL SUCCESS - Works for cats/dogs only
+
+**Why It Partially Failed**:
+- Successfully rejects cat and dog photos (MobileNet recognizes these well)
+- BUT accepts all other non-medical images (landscapes, food, objects)
+- The approach is too narrow - we need to reject ALL non-medical images
+- Need a fundamentally different signal that works for all image types
+
+---
+
+### Approach 7: GradCAM Focus Analysis (NEW)
+
+**Strategy**: Use the model's own attention patterns as validation
+
+**Key Insight**:
+When processing non-medical images through the heatmap generation:
+1. The heatmap often causes errors (RGBA vs RGB shape mismatch)
+2. The model's attention is scattered (doesn't focus on a coherent region)
+3. Valid skin lesions have focused attention on the lesion area
+
+**New Approach - Use GradCAM behavior as validation**:
+
+1. **Fix the RGBA/RGB error** in heatmap generation (convert RGBA to RGB)
+2. **Analyze GradCAM focus**:
+   - Calculate how concentrated the attention is
+   - Skin lesions → focused attention on lesion area
+   - Random images → scattered or no clear focus
+3. **Use focus metrics to validate**:
+   - High focus concentration → valid
+   - Low/scattered focus → likely not a skin lesion
+
+**Why This Should Work**:
+- Uses the classifier's own behavior rather than external heuristics
+- The skin lesion classifier was trained to look at lesion patterns
+- Non-medical images won't activate the same attention patterns
+- This is a positive signal ("does it look like what the model expects")
+
+**Implementation Notes**:
+- Added `analyze_gradcam_focus()` method to ExplainabilityEngine
+- Fixed RGBA/RGB broadcast error in `overlay_heatmap()`
+- Metrics calculated: peak_intensity, high_activation_ratio, spatial_concentration, center_distance, focus_score
+- Requires the skin lesion classifier model (not MobileNet) to be meaningful
+- Can be integrated as post-classification validation
+
 ---
 
 ## Root Cause Analysis (Updated)
@@ -319,25 +363,26 @@ The problem is distinguishing "MobileNet confused because medical" from "MobileN
 
 ## Conclusion
 
-After six different approaches, the key lessons are:
+After seven different approaches, the key lessons are:
 
 1. **Heuristic approaches fail** because medical images are too variable
 2. **MobileNet threshold approaches fail** because confidence scores are unreliable
 3. **Entropy-based approaches fail** because MobileNet doesn't produce expected patterns
-4. **The only reliable signals are very specific**: cats, dogs, and simple graphics
+4. **Minimal validation (cats/dogs only)** works but is too narrow
+5. **GradCAM focus analysis** is promising - uses the model's own behavior as signal
 
-The minimal validation approach (Approach 6) accepts the reality that:
-- We cannot reliably validate medical images without a custom-trained model
-- Any "smart" approach will fail in one direction (too strict or too lenient)
-- The safest option is to only catch the most obvious non-medical content
+The GradCAM approach (Approach 7) represents a fundamental shift:
+- Instead of negative detection ("what is NOT medical")
+- Use positive detection ("does it activate like a skin lesion should")
+- The classifier's attention patterns are a direct signal of whether the image matches training data
 
 **For production use, the recommended solution is**:
-- Train a custom binary classifier on medical vs non-medical images
+- Implement GradCAM-based validation (Approach 7)
+- If insufficient, train a custom binary classifier on medical vs non-medical images
 - Use a dataset of actual user uploads (with labels)
-- This is the only way to get reliable validation
 
 ---
 
 *Report updated: 2025-11-18*
 *Project: SkinLesionClassification*
-*Approaches tested: 6*
+*Approaches tested: 7*

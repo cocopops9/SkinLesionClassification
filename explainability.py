@@ -120,31 +120,118 @@ class ExplainabilityEngine:
         return heatmap.numpy()
     
     @staticmethod
-    def overlay_heatmap(img: np.ndarray, heatmap: np.ndarray, 
+    def overlay_heatmap(img: np.ndarray, heatmap: np.ndarray,
                        alpha: float = 0.4) -> np.ndarray:
         """
         Overlay Grad-CAM heatmap on original image.
-        
+
         Args:
             img: Original image array
             heatmap: Grad-CAM heatmap
             alpha: Transparency factor
-        
+
         Returns:
             Image with heatmap overlay
         """
+        # Ensure image is RGB (3 channels) - fix RGBA images
+        if len(img.shape) == 3 and img.shape[2] == 4:
+            # Convert RGBA to RGB
+            img = img[:, :, :3]
+        elif len(img.shape) == 2:
+            # Convert grayscale to RGB
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+
         # Resize heatmap to match image dimensions
         heatmap = cv2.resize(heatmap, (img.shape[1], img.shape[0]))
-        
+
         # Convert to RGB colormap
         heatmap = np.uint8(255 * heatmap)
         heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
-        
+        # Convert BGR to RGB (cv2 uses BGR)
+        heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
+
         # Superimpose heatmap
         overlaid = heatmap * alpha + img * (1 - alpha)
         overlaid = np.clip(overlaid, 0, 255).astype(np.uint8)
-        
+
         return overlaid
+
+    @staticmethod
+    def analyze_gradcam_focus(heatmap: np.ndarray) -> Dict[str, float]:
+        """
+        Analyze GradCAM heatmap focus patterns for validation.
+
+        Valid skin lesion images should have focused attention on lesion area.
+        Non-medical images typically have scattered or no clear focus.
+
+        Args:
+            heatmap: GradCAM heatmap (normalized 0-1)
+
+        Returns:
+            Dictionary with focus metrics
+        """
+        # Normalize heatmap to 0-1 if not already
+        if heatmap.max() > 1:
+            heatmap = heatmap / 255.0
+
+        # Calculate focus metrics
+
+        # 1. Peak intensity - highest activation
+        peak_intensity = float(np.max(heatmap))
+
+        # 2. Focus concentration - how much of the heatmap is highly activated
+        high_activation_threshold = 0.5
+        high_activation_ratio = float(np.mean(heatmap > high_activation_threshold))
+
+        # 3. Spatial concentration - are high activations clustered together?
+        # Use the ratio of area above threshold to total spread
+        if high_activation_ratio > 0:
+            # Find contours of high activation regions
+            heatmap_uint8 = np.uint8(heatmap * 255)
+            _, binary = cv2.threshold(heatmap_uint8, int(high_activation_threshold * 255), 255, cv2.THRESH_BINARY)
+            contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+            if contours:
+                # Get the largest contour area
+                largest_contour_area = max(cv2.contourArea(c) for c in contours)
+                total_area = heatmap.shape[0] * heatmap.shape[1]
+                spatial_concentration = float(largest_contour_area / total_area)
+            else:
+                spatial_concentration = 0.0
+        else:
+            spatial_concentration = 0.0
+
+        # 4. Center of mass distance from image center
+        # Skin lesions are often centered
+        if heatmap.sum() > 0:
+            y_indices, x_indices = np.indices(heatmap.shape)
+            center_y = np.average(y_indices, weights=heatmap)
+            center_x = np.average(x_indices, weights=heatmap)
+            img_center_y, img_center_x = heatmap.shape[0] / 2, heatmap.shape[1] / 2
+
+            # Normalize distance by image diagonal
+            diagonal = np.sqrt(heatmap.shape[0]**2 + heatmap.shape[1]**2)
+            center_distance = np.sqrt((center_y - img_center_y)**2 + (center_x - img_center_x)**2)
+            normalized_center_distance = float(center_distance / diagonal)
+        else:
+            normalized_center_distance = 0.5
+
+        # 5. Overall focus score (combined metric)
+        # Higher score = more focused attention = more likely valid
+        focus_score = (
+            peak_intensity * 0.3 +
+            (1 - high_activation_ratio) * 0.2 +  # Less spread = more focused
+            spatial_concentration * 0.3 +
+            (1 - normalized_center_distance) * 0.2  # Closer to center = better
+        )
+
+        return {
+            'peak_intensity': peak_intensity,
+            'high_activation_ratio': high_activation_ratio,
+            'spatial_concentration': spatial_concentration,
+            'center_distance': normalized_center_distance,
+            'focus_score': float(focus_score)
+        }
     
     @staticmethod
     def compute_occlusion_sensitivity(model: Model, img_array: np.ndarray,
