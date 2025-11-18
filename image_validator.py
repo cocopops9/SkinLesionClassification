@@ -335,11 +335,16 @@ class ImageValidator:
     
     def classify_with_mobilenet(self, img: np.ndarray) -> Tuple[bool, float, str]:
         """
-        Use MobileNetV2 to detect non-skin images.
-        
+        Use MobileNetV2 to detect non-skin images using entropy-based analysis.
+
+        NEW APPROACH: Use prediction confidence distribution, not just top prediction.
+        - High confidence on blacklisted class (>50%) → REJECT
+        - Very high confidence on ANY class (>85%) → REJECT (clear object, not medical)
+        - All top-5 predictions low (<20%) → ACCEPT (MobileNet confused = unusual/medical)
+
         Args:
             img: Input image in RGB format
-        
+
         Returns:
             Tuple of (is_likely_skin, confidence, detected_class)
         """
@@ -347,20 +352,50 @@ class ImageValidator:
         img_resized = cv2.resize(img, (224, 224))
         img_array = np.expand_dims(img_resized, axis=0)
         img_array = tf.keras.applications.mobilenet_v2.preprocess_input(img_array)
-        
+
         # Get predictions
         predictions = self.mobilenet.predict(img_array, verbose=0)
-        top_indices = np.argsort(predictions[0])[::-1][:5]
-        
-        # Check if any top prediction is clearly non-medical
-        # Use very high confidence threshold (80%) to avoid false rejections
+        top_indices = np.argsort(predictions[0])[::-1][:10]
+        top_confidences = [predictions[0][idx] for idx in top_indices[:5]]
+
+        # Get top prediction info
+        top_idx = top_indices[0]
+        top_conf = predictions[0][top_idx]
+
+        # Check 1: If top prediction is a blacklisted class with moderate confidence
+        # Lower threshold (50%) for specific non-medical objects
+        if top_conf > 0.50 and top_idx in self.non_skin_classes:
+            return False, top_conf, self.non_skin_classes[top_idx]
+
+        # Check 2: If very confident about ANY class, it's a clear object
+        # Medical images shouldn't strongly match any ImageNet class
+        if top_conf > 0.85:
+            # Get class name from ImageNet labels
+            class_name = f"class_{top_idx}"
+            # Check if it's in our blacklist
+            if top_idx in self.non_skin_classes:
+                return False, top_conf, self.non_skin_classes[top_idx]
+            # Even if not blacklisted, very high confidence means clear object
+            # Only reject if it's clearly not medical-related
+            # (medical classes like band-aid, syringe are allowed)
+            if top_idx not in self.medical_classes:
+                return False, top_conf, f"clear_object_{top_idx}"
+
+        # Check 3: Entropy-based acceptance
+        # If MobileNet is very confused (all top predictions low), accept
+        # This indicates unusual content like medical images
+        max_top5 = max(top_confidences)
+        if max_top5 < 0.25:
+            # Very confused - likely unusual/medical image
+            return True, 0.0, "unknown_medical"
+
+        # Check 4: Check if any of top-10 predictions hit blacklist with decent confidence
         for idx in top_indices:
             confidence = predictions[0][idx]
-            if confidence > 0.8:  # Very high threshold - only reject when very confident
-                if idx in self.non_skin_classes:
-                    return False, confidence, self.non_skin_classes[idx]
+            if confidence > 0.35 and idx in self.non_skin_classes:
+                return False, confidence, self.non_skin_classes[idx]
 
-        # If no clear non-medical class, assume potentially valid
+        # If no clear non-medical class detected, accept
         return True, 0.0, "unknown"
     
     def detect_text_presence(self, img: np.ndarray) -> bool:

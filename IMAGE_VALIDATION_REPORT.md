@@ -181,28 +181,114 @@ This trades some false positives (accepting non-medical images) for eliminating 
 
 ---
 
+### Approach 4: Simplified Semantic-Only with High Threshold (80%)
+
+**Strategy**: Only use MobileNet with very high confidence threshold
+
+**Changes**:
+- Removed ALL heuristic checks (skin detection, texture, color analysis)
+- Expanded MobileNet blacklist to ~100 classes
+- Raised confidence threshold to 80%
+- Only 3 checks: dimensions, MobileNet (80%), unique colors (<50)
+
+**Result**: TOO LENIENT - Accepts all images
+
+**Why It Failed**:
+- MobileNet is rarely >80% confident about anything
+- When looking at close-up photos (medical or not), MobileNet doesn't strongly match any class
+- The threshold is so high that nothing gets rejected
+
+---
+
+### Approach 5: Prediction Entropy Analysis (NEW)
+
+**Strategy**: Use how "confused" MobileNet is as a signal
+
+**Key Insight**:
+- When MobileNet sees a clear object (cat, car), it has HIGH confidence → Low entropy
+- When MobileNet sees unusual content (medical images), it's confused → High entropy
+- BUT random close-up photos also confuse it
+
+**New Approach - Dual Threshold System**:
+
+1. **Blacklist check with moderate threshold (50%)**:
+   - If MobileNet is >50% confident about a blacklisted class → REJECT
+   - This catches clear non-medical objects
+
+2. **High confidence on ANY class check (85%)**:
+   - If MobileNet is >85% confident about ANY class → probably clear object
+   - If that class is not medical-related → REJECT
+   - Medical images shouldn't strongly match any ImageNet class
+
+3. **Entropy-based acceptance**:
+   - If top-5 predictions are all <20% → MobileNet very confused → ACCEPT
+   - High entropy = unusual image = likely medical
+
+**Expected Behavior**:
+- Clear cat photo (90% confident) → REJECT
+- Landscape (75% confident) → REJECT
+- Dermoscopic image (all classes <20%) → ACCEPT
+- Clinical skin photo (all classes <25%) → ACCEPT
+- Random close-up (mixed confidence) → Additional checks
+
+---
+
+## Root Cause Analysis (Updated)
+
+### The Core Problem: No Good Signal
+
+The fundamental issue is that we're trying to detect "medical images" without any positive signal for what medical images look like. All approaches so far have been **negative detection** (reject what doesn't look right), which fails because:
+
+1. Medical images are highly variable
+2. We don't have labeled training data
+3. ImageNet wasn't trained on medical content
+
+### Why MobileNet Alone Fails
+
+MobileNet's confidence behavior:
+- Clear everyday objects → High confidence (good for rejection)
+- Ambiguous images → Moderate confidence (unreliable)
+- Unusual content (medical) → Low confidence (hard to distinguish from other low-confidence cases)
+
+The problem is distinguishing "MobileNet confused because medical" from "MobileNet confused because random close-up photo."
+
+---
+
 ## Recommendations
 
-### Short-term (Implemented)
-- Simplify validation to MobileNet-only with high confidence threshold
-- Remove all heuristic checks that cause false rejections
+### Short-term (Implementing)
+- Use dual-threshold MobileNet approach
+- Lower blacklist threshold to 50% for specific non-medical classes
+- Add high-confidence rejection for ANY clear object detection
 
 ### Medium-term
 - Train a custom binary classifier on medical vs non-medical images
-- Use transfer learning from a medical imaging model
+- Collect labeled dataset of valid skin lesion images + common non-medical uploads
+- Use transfer learning from medical imaging models (like DermNet)
 
 ### Long-term
-- Implement user feedback mechanism to improve validation
-- Use ensemble of specialized detectors
-- Consider CLIP or similar vision-language models for semantic understanding
+- Implement CLIP-based validation ("is this a photo of skin?")
+- User feedback mechanism to flag incorrect validations
+- Active learning to improve classifier over time
 
 ---
 
 ## Conclusion
 
-The core lesson learned is that distinguishing skin lesion images from other content requires semantic understanding, not statistical heuristics. Pre-trained ImageNet classifiers and color-based detection are insufficient for this task. The simplified approach prioritizes avoiding false rejections of valid medical images, which is critical for a healthcare application.
+After five different approaches, the key lessons are:
+
+1. **Heuristic approaches fail** because medical images are too variable
+2. **High MobileNet thresholds fail** because MobileNet is rarely confident about close-up photos
+3. **The best signal is MobileNet's confidence distribution**, not just the top prediction
+
+The new entropy-based approach uses MobileNet more intelligently:
+- Reject when confident about blacklisted classes (50% threshold)
+- Reject when very confident about any non-medical class (85% threshold)
+- Accept when confused (high entropy)
+
+This should better separate "clear everyday objects" from "unusual/medical content."
 
 ---
 
-*Report generated: 2025-11-18*
+*Report updated: 2025-11-18*
 *Project: SkinLesionClassification*
