@@ -12,6 +12,15 @@ from typing import Tuple, Dict, Optional
 from PIL import Image
 import io
 
+# CLIP imports for zero-shot classification
+try:
+    import clip
+    import torch
+    CLIP_AVAILABLE = True
+except ImportError:
+    CLIP_AVAILABLE = False
+    print("Warning: CLIP not available. Install with: pip install git+https://github.com/openai/CLIP.git")
+
 
 class ImageValidator:
     """
@@ -20,8 +29,46 @@ class ImageValidator:
     """
     
     def __init__(self):
-        """Initialize the validator with pre-trained MobileNetV2."""
+        """Initialize the validator with pre-trained MobileNetV2 and CLIP."""
         self.mobilenet = MobileNetV2(weights='imagenet', include_top=True)
+
+        # Initialize CLIP for zero-shot classification
+        self.clip_available = CLIP_AVAILABLE
+        if CLIP_AVAILABLE:
+            try:
+                self.device = "cuda" if torch.cuda.is_available() else "cpu"
+                self.clip_model, self.clip_preprocess = clip.load("ViT-B/32", device=self.device)
+
+                # Define text prompts for medical vs non-medical classification
+                self.medical_prompts = [
+                    "a medical image of skin",
+                    "a dermoscopic image of a skin lesion",
+                    "a clinical photograph of a skin condition",
+                    "a close-up photo of a mole or nevus",
+                    "a dermatology image"
+                ]
+                self.non_medical_prompts = [
+                    "a photo of a cat or dog",
+                    "a photo of an animal",
+                    "a landscape photograph",
+                    "a photo of food",
+                    "a screenshot or document",
+                    "a selfie or portrait",
+                    "a photo of a car or vehicle",
+                    "a photo of furniture or household items"
+                ]
+
+                # Pre-compute text embeddings
+                all_prompts = self.medical_prompts + self.non_medical_prompts
+                text_tokens = clip.tokenize(all_prompts).to(self.device)
+                with torch.no_grad():
+                    self.text_features = self.clip_model.encode_text(text_tokens)
+                    self.text_features = self.text_features / self.text_features.norm(dim=-1, keepdim=True)
+
+                self.num_medical_prompts = len(self.medical_prompts)
+            except Exception as e:
+                print(f"Warning: Failed to initialize CLIP: {e}")
+                self.clip_available = False
         
         # ImageNet classes related to skin/medical imagery
         self.medical_classes = {
@@ -377,7 +424,69 @@ class ImageValidator:
 
         # Accept everything else
         return True, 0.0, "accepted"
-    
+
+    def validate_with_clip(self, img: np.ndarray) -> Tuple[bool, float, str]:
+        """
+        Use CLIP zero-shot classification to determine if image is medical/skin-related.
+
+        CLIP was trained on a massive dataset of images with natural language descriptions,
+        making it excellent at understanding semantic content without being limited to
+        ImageNet classes.
+
+        Args:
+            img: Input image in RGB format
+
+        Returns:
+            Tuple of (is_medical, confidence, reason)
+        """
+        if not self.clip_available:
+            # Fall back to accepting if CLIP not available
+            return True, 0.5, "CLIP not available"
+
+        try:
+            # Convert numpy array to PIL Image for CLIP preprocessing
+            pil_image = Image.fromarray(img)
+
+            # Preprocess image for CLIP
+            image_input = self.clip_preprocess(pil_image).unsqueeze(0).to(self.device)
+
+            # Compute image features
+            with torch.no_grad():
+                image_features = self.clip_model.encode_image(image_input)
+                image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+
+                # Compute similarities with all text prompts
+                similarities = (image_features @ self.text_features.T).squeeze(0)
+
+                # Apply softmax to get probabilities
+                probs = similarities.softmax(dim=-1).cpu().numpy()
+
+            # Sum probabilities for medical vs non-medical prompts
+            medical_score = float(np.sum(probs[:self.num_medical_prompts]))
+            non_medical_score = float(np.sum(probs[self.num_medical_prompts:]))
+
+            # Determine if medical based on scores
+            is_medical = medical_score > non_medical_score
+
+            # Calculate confidence as the margin between scores
+            confidence = abs(medical_score - non_medical_score)
+
+            if is_medical:
+                # Find best matching medical prompt for reporting
+                best_medical_idx = np.argmax(probs[:self.num_medical_prompts])
+                reason = f"Matches: {self.medical_prompts[best_medical_idx]}"
+            else:
+                # Find best matching non-medical prompt for reporting
+                best_non_medical_idx = np.argmax(probs[self.num_medical_prompts:])
+                reason = f"Detected as: {self.non_medical_prompts[best_non_medical_idx]}"
+
+            return is_medical, confidence, reason
+
+        except Exception as e:
+            # If CLIP fails, fall back to accepting
+            print(f"CLIP validation error: {e}")
+            return True, 0.5, f"CLIP error: {str(e)}"
+
     def detect_text_presence(self, img: np.ndarray) -> bool:
         """
         Detect if image contains significant text (screenshots, documents).
@@ -410,15 +519,18 @@ class ImageValidator:
     
     def validate_image(self, img_input) -> Dict[str, any]:
         """
-        Simplified image validation pipeline.
+        Image validation pipeline using CLIP zero-shot classification.
 
-        NEW APPROACH: Only reject images when we are very confident they are
-        not medical images. This avoids false rejections of valid skin lesions.
+        CLIP-BASED APPROACH: Uses semantic understanding to distinguish
+        medical skin images from non-medical content. CLIP was trained on
+        diverse image-text pairs and can understand semantic concepts beyond
+        ImageNet classes.
 
         Rejection criteria:
         1. Invalid dimensions
-        2. MobileNet detects non-medical object with >80% confidence
-        3. Image is a simple graphic (<50 unique colors)
+        2. Simple graphic detection (very few unique colors)
+        3. CLIP classifies as non-medical content
+        4. Fallback: MobileNet detects cats/dogs (if CLIP unavailable)
 
         Args:
             img_input: PIL Image or numpy array
@@ -447,25 +559,13 @@ class ImageValidator:
             results['confidence'] = 0.0
             return results
 
-        # Check 2: MobileNet classification
-        # Only reject if very confident (>80%) it's a non-medical object
-        is_valid_type, mobilenet_conf, detected_class = self.classify_with_mobilenet(img)
-        if not is_valid_type:
-            results['is_valid'] = False
-            results['reasons'].append(
-                f"Image detected as '{detected_class}' with {mobilenet_conf*100:.1f}% confidence"
-            )
-            results['confidence'] = 1.0 - mobilenet_conf
-            return results
-
-        # Check 3: Simple graphic detection
+        # Check 2: Simple graphic detection
         # Only reject obvious icons/drawings with very few unique colors
         try:
-            # Quantize and count unique colors
             img_small = cv2.resize(img, (100, 100)) if img.shape[0] > 100 else img
             unique_colors = len(np.unique(img_small.reshape(-1, 3), axis=0))
 
-            if unique_colors < 30:  # Very strict - only catch obvious graphics
+            if unique_colors < 30:
                 results['is_valid'] = False
                 results['reasons'].append(
                     f"Image appears to be a simple graphic ({unique_colors} unique colors)"
@@ -473,8 +573,31 @@ class ImageValidator:
                 results['confidence'] = 0.2
                 return results
         except Exception:
-            # If color analysis fails, don't reject
             pass
+
+        # Check 3: CLIP-based semantic classification (PRIMARY METHOD)
+        if self.clip_available:
+            is_medical, clip_confidence, clip_reason = self.validate_with_clip(img)
+            if not is_medical:
+                results['is_valid'] = False
+                results['reasons'].append(clip_reason)
+                results['confidence'] = 1.0 - clip_confidence
+                return results
+            else:
+                # CLIP validated as medical
+                results['confidence'] = clip_confidence
+                return results
+        else:
+            # Fallback: MobileNet classification for cats/dogs only
+            results['warnings'].append("CLIP not available - using limited MobileNet validation")
+            is_valid_type, mobilenet_conf, detected_class = self.classify_with_mobilenet(img)
+            if not is_valid_type:
+                results['is_valid'] = False
+                results['reasons'].append(
+                    f"Image detected as '{detected_class}' with {mobilenet_conf*100:.1f}% confidence"
+                )
+                results['confidence'] = 1.0 - mobilenet_conf
+                return results
 
         # Image passed all checks
         results['confidence'] = 1.0
