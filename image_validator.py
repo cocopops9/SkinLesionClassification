@@ -40,23 +40,40 @@ class ImageValidator:
                 self.clip_model, self.clip_preprocess = clip.load("ViT-B/32", device=self.device)
 
                 # Define text prompts for medical vs non-medical classification
+                # More specific medical prompts for better discrimination
                 self.medical_prompts = [
-                    "a medical image of skin",
                     "a dermoscopic image of a skin lesion",
-                    "a clinical photograph of a skin condition",
-                    "a close-up photo of a mole or nevus",
-                    "a dermatology image"
+                    "a clinical photograph of a mole",
+                    "a medical dermatology image",
+                    "a close-up photo of skin with a lesion",
+                    "a dermoscopy photograph of melanoma"
                 ]
+                # Expanded non-medical prompts to catch more categories
                 self.non_medical_prompts = [
-                    "a photo of a cat or dog",
-                    "a photo of an animal",
-                    "a landscape photograph",
-                    "a photo of food",
-                    "a screenshot or document",
-                    "a selfie or portrait",
+                    "a photo of a cat",
+                    "a photo of a dog",
+                    "a photo of a pet animal",
+                    "a wildlife photograph",
+                    "a landscape or nature photograph",
+                    "a photo of food or meal",
+                    "a screenshot of a computer screen",
+                    "a photo of a person's face",
+                    "a selfie photograph",
                     "a photo of a car or vehicle",
-                    "a photo of furniture or household items"
+                    "a photo of a building or architecture",
+                    "a photo of clothing or fashion",
+                    "a photo of text or document",
+                    "a photo of electronics or gadgets",
+                    "a photo of toys or games",
+                    "a painting or artwork",
+                    "a cartoon or illustration",
+                    "a photo of plants or flowers",
+                    "a photo of sports or athletics",
+                    "a photo of a sunset or sunrise"
                 ]
+
+                # Margin threshold for stricter validation
+                self.clip_margin_threshold = 0.15
 
                 # Pre-compute text embeddings
                 all_prompts = self.medical_prompts + self.non_medical_prompts
@@ -465,22 +482,28 @@ class ImageValidator:
             medical_score = float(np.sum(probs[:self.num_medical_prompts]))
             non_medical_score = float(np.sum(probs[self.num_medical_prompts:]))
 
-            # Determine if medical based on scores
-            is_medical = medical_score > non_medical_score
+            # Calculate margin between scores
+            margin = medical_score - non_medical_score
+            confidence = abs(margin)
 
-            # Calculate confidence as the margin between scores
-            confidence = abs(medical_score - non_medical_score)
+            # Find best matching prompts for reporting
+            best_medical_idx = np.argmax(probs[:self.num_medical_prompts])
+            best_non_medical_idx = np.argmax(probs[self.num_medical_prompts:])
 
-            if is_medical:
-                # Find best matching medical prompt for reporting
-                best_medical_idx = np.argmax(probs[:self.num_medical_prompts])
-                reason = f"Matches: {self.medical_prompts[best_medical_idx]}"
+            # Stricter validation: require medical score to exceed non-medical by margin
+            # This prevents borderline cases from passing
+            if margin > self.clip_margin_threshold:
+                # Clear medical image
+                reason = f"Matches: {self.medical_prompts[best_medical_idx]} (margin: {margin:.2f})"
+                return True, confidence, reason
+            elif margin < -self.clip_margin_threshold:
+                # Clear non-medical image
+                reason = f"Detected as: {self.non_medical_prompts[best_non_medical_idx]} (margin: {-margin:.2f})"
+                return False, confidence, reason
             else:
-                # Find best matching non-medical prompt for reporting
-                best_non_medical_idx = np.argmax(probs[self.num_medical_prompts:])
-                reason = f"Detected as: {self.non_medical_prompts[best_non_medical_idx]}"
-
-            return is_medical, confidence, reason
+                # Ambiguous case - reject to be safe
+                reason = f"Ambiguous image (margin: {margin:.2f}, need >{self.clip_margin_threshold})"
+                return False, confidence, reason
 
         except Exception as e:
             # If CLIP fails, fall back to accepting

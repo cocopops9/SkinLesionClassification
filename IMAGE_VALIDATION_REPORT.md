@@ -344,6 +344,43 @@ The RGBA/RGB fix removed a "bug" that was partially helping validation. Before t
 | 5 | Entropy analysis | Use prediction distribution patterns | NO IMPROVEMENT |
 | 6 | Cats/dogs only (40%) | Minimal - only reject obvious pets | PARTIAL (pets only) |
 | 7 | GradCAM focus analysis | Use model attention patterns | NO IMPROVEMENT |
+| 8 | CLIP zero-shot classification | Use CLIP semantic understanding | NO IMPROVEMENT |
+
+---
+
+### Approach 8: CLIP Zero-Shot Classification
+
+**Strategy**: Use CLIP's semantic understanding to classify medical vs non-medical
+
+**Implementation**:
+- Load CLIP ViT-B/32 model
+- Define text prompts:
+  - Medical (5): dermoscopic image, skin lesion, clinical photograph, mole/nevus, dermatology image
+  - Non-medical (8): cat/dog, animal, landscape, food, screenshot, selfie, vehicle, furniture
+- Pre-compute text embeddings
+- Compare image embeddings to text embeddings using cosine similarity
+- Sum scores for medical vs non-medical prompts
+- Accept if medical_score > non_medical_score
+
+**Why This Should Work**:
+- CLIP was trained on 400M image-text pairs
+- It understands semantic concepts beyond ImageNet classes
+- Can recognize "dermoscopic image" or "skin lesion" concepts
+- Zero-shot classification doesn't require training data
+
+**Result**: NO IMPROVEMENT
+
+**Why It Failed**:
+- CLIP's semantic understanding may not be specific enough for medical imagery
+- The simple threshold (medical > non-medical) may be too lenient
+- Text prompts may not capture the full semantic space of valid/invalid images
+- CLIP may have limited exposure to dermoscopic/medical imagery in training data
+- Non-medical images may match "close-up photo" patterns similar to skin images
+
+**Technical Notes**:
+- Added torch, torchvision, clip, ftfy, regex dependencies
+- Falls back to MobileNet if CLIP not available
+- Uses softmax over similarities for probability-like scores
 
 ---
 
@@ -488,7 +525,7 @@ Many medical AI systems rely on user compliance when technical limitations exist
 
 ## Conclusion
 
-After seven different approaches, **all attempts have failed** to create a reliable image validator using pre-trained models and heuristics.
+After eight different approaches, **all attempts have failed** to create a reliable image validator using pre-trained models and heuristics.
 
 ### Key Lessons Learned:
 
@@ -498,6 +535,7 @@ After seven different approaches, **all attempts have failed** to create a relia
 4. **Minimal validation (cats/dogs only)** works but is too narrow - doesn't catch other invalid images
 5. **GradCAM focus analysis** was not properly integrated and fixing errors made validation worse
 6. **Bug-as-feature**: The RGBA/RGB error was inadvertently helping validation by blocking some invalid images
+7. **CLIP zero-shot** - even semantic understanding models don't reliably distinguish medical images
 
 ### The Fundamental Problem:
 
@@ -532,5 +570,5 @@ This is the **only reliable way** to achieve the goal of rejecting ALL non-medic
 
 *Report updated: 2025-11-18*
 *Project: SkinLesionClassification*
-*Approaches tested: 7*
+*Approaches tested: 8*
 *Status: No reliable solution found without custom training*
