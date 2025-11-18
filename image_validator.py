@@ -403,14 +403,12 @@ class ImageValidator:
         
         # Check 4: Skin presence detection
         skin_ratio = self.detect_skin_presence(img)
-        if skin_ratio < 0.05:  # Less than 5% skin-like pixels
-            results['is_valid'] = False
-            results['reasons'].append(f"No skin detected (only {skin_ratio*100:.1f}% skin-like pixels)")
-            results['confidence'] *= 0.3
-            return results
-        elif skin_ratio < 0.2:
-            results['warnings'].append(f"Low skin presence detected ({skin_ratio*100:.1f}%)")
+        if skin_ratio < 0.01:  # Less than 1% skin-like pixels - very lenient
+            results['warnings'].append(f"Very low skin presence detected ({skin_ratio*100:.1f}%)")
             results['confidence'] *= 0.7
+        elif skin_ratio < 0.1:
+            results['warnings'].append(f"Low skin presence detected ({skin_ratio*100:.1f}%)")
+            results['confidence'] *= 0.9
         
         # Check 5: Color statistics
         color_stats = self.analyze_color_statistics(img)
@@ -432,55 +430,33 @@ class ImageValidator:
             results['warnings'].append("High edge density detected")
             results['confidence'] *= 0.85
 
-        # Check 6: Uniform color regions (helps detect non-skin images)
+        # Check 6: Uniform color regions (informational only - don't reject)
         uniform_stats = self.detect_uniform_regions(img)
 
-        # Only reject extremely fragmented images (very low threshold)
+        # Just warn on fragmented images, don't reject
         if uniform_stats['largest_region_pct'] < 0.08:
-            results['is_valid'] = False
-            results['reasons'].append(
-                f"No uniform color areas detected ({uniform_stats['largest_region_pct']*100:.1f}% largest region). "
-                "Skin lesion images should have visible skin background."
-            )
-            results['confidence'] *= 0.3
-            return results
-
-        # Only reject extremely busy/colorful images
-        if uniform_stats['top2_coverage'] < 0.25:
-            results['is_valid'] = False
-            results['reasons'].append(
-                f"Image too colorful/busy ({uniform_stats['top2_coverage']*100:.1f}% top-2 color coverage). "
-                "Skin lesion images have more uniform color distribution."
-            )
-            results['confidence'] *= 0.3
-            return results
-
-        # Warn on high local color variance but don't reject
-        if uniform_stats['avg_local_std'] > 50:
             results['warnings'].append(
-                f"High color variation detected (local std: {uniform_stats['avg_local_std']:.1f})"
+                f"Low uniform color areas ({uniform_stats['largest_region_pct']*100:.1f}% largest region)"
             )
-            results['confidence'] *= 0.85
+            results['confidence'] *= 0.9
 
-        # Check 7: Texture uniformity analysis
+        # Just warn on busy/colorful images, don't reject
+        if uniform_stats['top2_coverage'] < 0.25:
+            results['warnings'].append(
+                f"High color diversity ({uniform_stats['top2_coverage']*100:.1f}% top-2 color coverage)"
+            )
+            results['confidence'] *= 0.9
+
+        # Check 7: Texture uniformity analysis (informational only)
         texture_stats = self.analyze_texture_uniformity(img)
 
-        # Very high frequency ratio indicates unnatural patterns
-        if texture_stats['freq_ratio'] > 100:
+        # Just warn on unusual patterns, don't reject
+        if texture_stats['freq_ratio'] > 150:
             results['warnings'].append("Unusual texture patterns detected")
-            results['confidence'] *= 0.85
+            results['confidence'] *= 0.95
 
-        # Only reject extremely chaotic textures
-        if texture_stats['gradient_cv'] > 5.0:
-            results['is_valid'] = False
-            results['reasons'].append(
-                "Image texture too irregular for skin lesion imagery"
-            )
-            results['confidence'] *= 0.4
-            return results
-
-        # Final validation
-        if results['confidence'] < 0.5:
+        # Final validation - very lenient threshold
+        if results['confidence'] < 0.3:
             results['is_valid'] = False
             if not results['reasons']:
                 results['reasons'].append("Image characteristics inconsistent with skin lesion imagery")
