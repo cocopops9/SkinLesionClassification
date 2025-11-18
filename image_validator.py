@@ -39,51 +39,20 @@ class ImageValidator:
                 self.device = "cuda" if torch.cuda.is_available() else "cpu"
                 self.clip_model, self.clip_preprocess = clip.load("ViT-B/32", device=self.device)
 
-                # Define text prompts for medical vs non-medical classification
-                # More specific medical prompts for better discrimination
-                self.medical_prompts = [
-                    "a dermoscopic image of a skin lesion",
-                    "a clinical photograph of a mole",
-                    "a medical dermatology image",
-                    "a close-up photo of skin with a lesion",
-                    "a dermoscopy photograph of melanoma"
-                ]
-                # Expanded non-medical prompts to catch more categories
-                self.non_medical_prompts = [
-                    "a photo of a cat",
-                    "a photo of a dog",
-                    "a photo of a pet animal",
-                    "a wildlife photograph",
-                    "a landscape or nature photograph",
-                    "a photo of food or meal",
-                    "a screenshot of a computer screen",
-                    "a photo of a person's face",
-                    "a selfie photograph",
-                    "a photo of a car or vehicle",
-                    "a photo of a building or architecture",
-                    "a photo of clothing or fashion",
-                    "a photo of text or document",
-                    "a photo of electronics or gadgets",
-                    "a photo of toys or games",
-                    "a painting or artwork",
-                    "a cartoon or illustration",
-                    "a photo of plants or flowers",
-                    "a photo of sports or athletics",
-                    "a photo of a sunset or sunrise"
-                ]
+                # Binary CLIP comparison - just 2 prompts to avoid softmax dilution
+                # This gives clear 50/50 probability split
+                self.medical_prompt = "a dermoscopic or clinical photograph of a skin lesion or mole"
+                self.non_medical_prompt = "a photograph that is not a medical skin image"
 
-                # Thresholds for individual prompt matching
-                self.non_medical_threshold = 0.08  # Reject if any non-medical prompt > 8%
-                self.medical_threshold = 0.12  # Accept if any medical prompt > 12%
+                # Threshold: require medical to be significantly higher
+                self.binary_threshold = 0.55  # Medical must be >55% to accept
 
-                # Pre-compute text embeddings
-                all_prompts = self.medical_prompts + self.non_medical_prompts
-                text_tokens = clip.tokenize(all_prompts).to(self.device)
+                # Pre-compute text embeddings for binary comparison
+                binary_prompts = [self.medical_prompt, self.non_medical_prompt]
+                text_tokens = clip.tokenize(binary_prompts).to(self.device)
                 with torch.no_grad():
                     self.text_features = self.clip_model.encode_text(text_tokens)
                     self.text_features = self.text_features / self.text_features.norm(dim=-1, keepdim=True)
-
-                self.num_medical_prompts = len(self.medical_prompts)
             except Exception as e:
                 print(f"Warning: Failed to initialize CLIP: {e}")
                 self.clip_available = False
@@ -479,37 +448,17 @@ class ImageValidator:
                 # Apply softmax to get probabilities
                 probs = similarities.softmax(dim=-1).cpu().numpy()
 
-            # Individual prompt matching approach
-            # Look at maximum probability for individual prompts, not aggregates
-            medical_probs = probs[:self.num_medical_prompts]
-            non_medical_probs = probs[self.num_medical_prompts:]
+            # Binary comparison - just 2 prompts, no dilution
+            medical_prob = float(probs[0])
+            non_medical_prob = float(probs[1])
 
-            max_medical_prob = float(np.max(medical_probs))
-            max_non_medical_prob = float(np.max(non_medical_probs))
-
-            best_medical_idx = int(np.argmax(medical_probs))
-            best_non_medical_idx = int(np.argmax(non_medical_probs))
-
-            # Decision logic based on individual prompt strength
-            # If any non-medical prompt has strong match, reject
-            if max_non_medical_prob > self.non_medical_threshold:
-                if max_non_medical_prob > max_medical_prob:
-                    # Clear non-medical match
-                    reason = f"Detected as: {self.non_medical_prompts[best_non_medical_idx]} ({max_non_medical_prob*100:.1f}%)"
-                    return False, max_non_medical_prob, reason
-
-            # If any medical prompt has strong match, accept
-            if max_medical_prob > self.medical_threshold:
-                reason = f"Matches: {self.medical_prompts[best_medical_idx]} ({max_medical_prob*100:.1f}%)"
-                return True, max_medical_prob, reason
-
-            # Borderline case - compare relative strengths
-            if max_medical_prob > max_non_medical_prob:
-                reason = f"Weak match: {self.medical_prompts[best_medical_idx]} ({max_medical_prob*100:.1f}%)"
-                return True, max_medical_prob, reason
+            # Simple threshold check
+            if medical_prob >= self.binary_threshold:
+                reason = f"Medical skin image ({medical_prob*100:.1f}% confidence)"
+                return True, medical_prob, reason
             else:
-                reason = f"No strong medical match (best: {max_medical_prob*100:.1f}% vs {max_non_medical_prob*100:.1f}%)"
-                return False, max_non_medical_prob, reason
+                reason = f"Not a medical skin image ({non_medical_prob*100:.1f}% non-medical vs {medical_prob*100:.1f}% medical)"
+                return False, non_medical_prob, reason
 
         except Exception as e:
             # If CLIP fails, fall back to accepting

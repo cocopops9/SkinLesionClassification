@@ -346,6 +346,7 @@ The RGBA/RGB fix removed a "bug" that was partially helping validation. Before t
 | 7 | GradCAM focus analysis | Use model attention patterns | NO IMPROVEMENT |
 | 8 | CLIP zero-shot classification | Use CLIP semantic understanding | NO IMPROVEMENT |
 | 9 | Stricter CLIP with margin | Require margin threshold, expanded prompts | NO IMPROVEMENT |
+| 10 | Individual prompt matching | Use max single prompt instead of aggregates | NO IMPROVEMENT |
 
 ---
 
@@ -415,6 +416,38 @@ The RGBA/RGB fix removed a "bug" that was partially helping validation. Before t
 
 **Key Insight**:
 The aggregate scoring approach is fundamentally flawed. When you have 20 non-medical prompts, each one gets a small share of the probability mass. Even a clear cat photo might only score 10-15% on "photo of a cat" because the probability is spread across all prompts.
+
+---
+
+### Approach 10: Individual Prompt Matching
+
+**Strategy**: Use maximum individual prompt probability instead of aggregate sums
+
+**Implementation**:
+- Look at max probability for any single medical prompt
+- Look at max probability for any single non-medical prompt
+- Thresholds: non_medical > 8%, medical > 12%
+- Decision logic:
+  - If max_non_medical > 8% AND > max_medical → Reject
+  - If max_medical > 12% → Accept
+  - Otherwise compare max_medical vs max_non_medical
+
+**Why This Should Work**:
+- Avoids dilution problem from aggregate scoring
+- A clear cat photo should score high on "photo of a cat" individually
+- Strong individual matches trigger decisions regardless of other prompts
+
+**Result**: NO IMPROVEMENT - Still validates invalid images
+
+**Why It Failed**:
+- Even with individual matching, CLIP probabilities are still low
+- With softmax over 25 prompts, even the best match rarely exceeds 15%
+- The 8% threshold for non-medical is too high given softmax dilution
+- CLIP may genuinely not distinguish medical images well
+- The prompts themselves may not be discriminative enough
+
+**Key Insight**:
+The softmax normalization across all prompts is the core issue. Even if an image strongly matches "photo of a cat", when you have 25 prompts, the softmax spreads probability such that no single prompt gets a high score. The issue is not aggregate vs individual - it's the softmax itself.
 
 ---
 
@@ -559,7 +592,7 @@ Many medical AI systems rely on user compliance when technical limitations exist
 
 ## Conclusion
 
-After nine different approaches, **all attempts have failed** to create a reliable image validator using pre-trained models and heuristics.
+After ten different approaches, **all attempts have failed** to create a reliable image validator using pre-trained models and heuristics.
 
 ### Key Lessons Learned:
 
@@ -571,6 +604,7 @@ After nine different approaches, **all attempts have failed** to create a reliab
 6. **Bug-as-feature**: The RGBA/RGB error was inadvertently helping validation by blocking some invalid images
 7. **CLIP zero-shot** - even semantic understanding models don't reliably distinguish medical images
 8. **Aggregate scoring** - summing probabilities dilutes strong individual matches
+9. **Softmax dilution** - normalizing across many prompts prevents any single prompt from scoring high
 
 ### The Fundamental Problem:
 
@@ -605,5 +639,5 @@ This is the **only reliable way** to achieve the goal of rejecting ALL non-medic
 
 *Report updated: 2025-11-18*
 *Project: SkinLesionClassification*
-*Approaches tested: 9*
+*Approaches tested: 10*
 *Status: No reliable solution found without custom training*
