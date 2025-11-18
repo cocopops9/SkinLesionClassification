@@ -370,20 +370,119 @@ The problem is distinguishing "MobileNet confused because medical" from "MobileN
 
 ## Recommendations
 
-### Short-term (Implementing)
-- Use dual-threshold MobileNet approach
-- Lower blacklist threshold to 50% for specific non-medical classes
-- Add high-confidence rejection for ANY clear object detection
+### Why Current Approach Will Never Work
 
-### Medium-term
-- Train a custom binary classifier on medical vs non-medical images
-- Collect labeled dataset of valid skin lesion images + common non-medical uploads
-- Use transfer learning from medical imaging models (like DermNet)
+The MobileNetV2 approach is fundamentally flawed because:
+- ImageNet classes have near-zero overlap with medical imagery
+- Confidence thresholds are arbitrary without calibration data
+- Combining multiple weak signals doesn't create a strong signal
+- Dermoscopic images look like abstract art to ImageNet models
 
-### Long-term
-- Implement CLIP-based validation ("is this a photo of skin?")
-- User feedback mechanism to flag incorrect validations
-- Active learning to improve classifier over time
+**Stop trying to solve this with heuristics and pre-trained general models.** The problem requires domain-specific training.
+
+### Immediate Solution: CLIP-Based Zero-Shot Classification
+
+```python
+import clip
+import torch
+
+model, preprocess = clip.load("ViT-B/32")
+
+def validate_with_clip(image):
+    text_prompts = [
+        "a medical image of skin",
+        "a dermoscopic image of a skin lesion",
+        "a clinical photograph of skin condition",
+        "a photo of a cat or dog",
+        "a landscape photo",
+        "a photo of food",
+        "a screenshot or document"
+    ]
+
+    image_input = preprocess(image).unsqueeze(0)
+    text_inputs = clip.tokenize(text_prompts)
+
+    with torch.no_grad():
+        image_features = model.encode_image(image_input)
+        text_features = model.encode_text(text_inputs)
+        similarities = (image_features @ text_features.T).softmax(dim=-1)
+
+    medical_score = similarities[0][:3].sum()
+    non_medical_score = similarities[0][3:].sum()
+
+    return medical_score > non_medical_score
+```
+
+**Expected improvement**: 60-70% better than current approach. CLIP was trained on 400M image-text pairs and has some understanding of medical imagery through caption associations.
+
+### Short-term Solution: Train Binary Classifier
+
+```python
+from tensorflow.keras.applications import EfficientNetB0
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
+
+# Collect dataset (~1000 images minimum)
+# Positive: Real dermoscopic/clinical images from HAM10000, ISIC
+# Negative: Common uploads (pets, food, landscapes, selfies)
+
+base_model = EfficientNetB0(weights='imagenet', include_top=False)
+x = base_model.output
+x = GlobalAveragePooling2D()(x)
+x = Dense(128, activation='relu')(x)
+predictions = Dense(1, activation='sigmoid')(x)  # Binary: medical/non-medical
+
+# Fine-tune last 20 layers
+for layer in base_model.layers[:-20]:
+    layer.trainable = False
+```
+
+**Data collection strategy**:
+- Positive samples: Use subset of HAM10000 dataset (already available)
+- Negative samples: Scrape common categories from Unsplash/Pixabay (pets, food, landscapes)
+
+### Alternative: Leverage Existing Classifier Behavior
+
+```python
+def validate_using_main_classifier(image):
+    """
+    Use the fact that the melanoma classifier outputs
+    garbage predictions on non-medical images
+    """
+    predictions = melanoma_classifier.predict(image)
+
+    max_confidence = np.max(predictions)
+    entropy = -np.sum(predictions * np.log(predictions + 1e-10))
+
+    # Non-medical images typically show:
+    # - Very uniform distribution (high entropy > 1.8)
+    # - Or single very high confidence (>0.9) in one class
+    # Medical images show moderate confidence (0.3-0.7) distribution
+
+    if entropy > 1.8:  # Too confused
+        return False, "Non-medical: classifier confusion"
+    if max_confidence > 0.9:  # Too confident (overfitting to noise)
+        return False, "Non-medical: anomalous confidence"
+
+    return True, "Appears medical"
+```
+
+### Pragmatic Solution: Accept Limitations
+
+```python
+def validate_with_disclaimer(image):
+    # Only reject absolutely obvious non-medical
+    if is_cat_or_dog(image):
+        return False, "Pet photo detected"
+
+    # Add prominent disclaimer in UI
+    return True, """
+    ⚠️ IMPORTANT: This system cannot verify medical image validity.
+    Please ensure you upload dermoscopic or clinical skin images only.
+    Non-medical images will produce meaningless results.
+    """
+```
+
+Many medical AI systems rely on user compliance when technical limitations exist.
 
 ---
 
