@@ -183,63 +183,75 @@ class ImageValidator:
         Returns:
             Dictionary with uniform region metrics
         """
-        # Convert to LAB for better color similarity detection
-        lab = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)
+        try:
+            # Convert to LAB for better color similarity detection
+            lab = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)
 
-        # Apply bilateral filter to reduce noise while keeping edges
-        filtered = cv2.bilateralFilter(lab, 9, 75, 75)
+            # Apply bilateral filter to reduce noise while keeping edges
+            filtered = cv2.bilateralFilter(lab, 9, 75, 75)
 
-        # Compute local color variance using a sliding window approach
-        # Resize for efficiency
-        scale = min(200 / img.shape[0], 200 / img.shape[1], 1.0)
-        if scale < 1.0:
-            small = cv2.resize(filtered, None, fx=scale, fy=scale)
-        else:
-            small = filtered
+            # Compute local color variance using a sliding window approach
+            # Resize for efficiency
+            scale = min(200 / img.shape[0], 200 / img.shape[1], 1.0)
+            if scale < 1.0:
+                small = cv2.resize(filtered, None, fx=scale, fy=scale)
+            else:
+                small = filtered
 
-        # Calculate local standard deviation
-        kernel_size = 15
-        local_mean = cv2.blur(small.astype(np.float32), (kernel_size, kernel_size))
-        local_sqr_mean = cv2.blur((small.astype(np.float32) ** 2), (kernel_size, kernel_size))
-        local_variance = local_sqr_mean - local_mean ** 2
-        local_std = np.sqrt(np.maximum(local_variance, 0))
+            # Calculate local standard deviation
+            kernel_size = 15
+            local_mean = cv2.blur(small.astype(np.float32), (kernel_size, kernel_size))
+            local_sqr_mean = cv2.blur((small.astype(np.float32) ** 2), (kernel_size, kernel_size))
+            local_variance = local_sqr_mean - local_mean ** 2
+            local_std = np.sqrt(np.maximum(local_variance, 0))
 
-        # Average local standard deviation across all LAB channels
-        avg_local_std = np.mean(local_std)
+            # Average local standard deviation across all LAB channels
+            if local_std.size > 0:
+                avg_local_std = np.mean(local_std)
+            else:
+                avg_local_std = 0.0
 
-        # Use color quantization to find dominant colors
-        pixels = img.reshape(-1, 3).astype(np.float32)
+            # Use color quantization to find dominant colors
+            pixels = img.reshape(-1, 3).astype(np.float32)
 
-        # K-means clustering to find dominant colors
-        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
-        k = 5  # Number of dominant colors to find
+            # K-means clustering to find dominant colors
+            criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
+            k = 5  # Number of dominant colors to find
 
-        # Sample pixels for efficiency
-        if len(pixels) > 10000:
-            indices = np.random.choice(len(pixels), 10000, replace=False)
-            sample_pixels = pixels[indices]
-        else:
-            sample_pixels = pixels
+            # Sample pixels for efficiency
+            if len(pixels) > 10000:
+                indices = np.random.choice(len(pixels), 10000, replace=False)
+                sample_pixels = pixels[indices]
+            else:
+                sample_pixels = pixels
 
-        _, labels, centers = cv2.kmeans(sample_pixels, k, None, criteria, 3, cv2.KMEANS_PP_CENTERS)
+            _, labels, centers = cv2.kmeans(sample_pixels, k, None, criteria, 3, cv2.KMEANS_PP_CENTERS)
 
-        # Calculate percentage of pixels in each cluster
-        unique_labels, counts = np.unique(labels, return_counts=True)
-        percentages = counts / len(labels)
+            # Calculate percentage of pixels in each cluster
+            unique_labels, counts = np.unique(labels, return_counts=True)
+            percentages = counts / len(labels)
 
-        # Largest uniform region percentage
-        largest_region_pct = np.max(percentages)
+            # Largest uniform region percentage
+            largest_region_pct = np.max(percentages) if len(percentages) > 0 else 0.5
 
-        # Check if top 2 colors dominate (typical for skin + lesion)
-        sorted_pcts = np.sort(percentages)[::-1]
-        top2_coverage = sorted_pcts[0] + sorted_pcts[1] if len(sorted_pcts) > 1 else sorted_pcts[0]
+            # Check if top 2 colors dominate (typical for skin + lesion)
+            sorted_pcts = np.sort(percentages)[::-1]
+            top2_coverage = sorted_pcts[0] + sorted_pcts[1] if len(sorted_pcts) > 1 else sorted_pcts[0] if len(sorted_pcts) > 0 else 0.5
 
-        return {
-            'avg_local_std': avg_local_std,
-            'largest_region_pct': largest_region_pct,
-            'top2_coverage': top2_coverage,
-            'color_spread': np.std(percentages)
-        }
+            return {
+                'avg_local_std': float(avg_local_std),
+                'largest_region_pct': float(largest_region_pct),
+                'top2_coverage': float(top2_coverage),
+                'color_spread': float(np.std(percentages)) if len(percentages) > 0 else 0.0
+            }
+        except Exception:
+            # Return default values if analysis fails
+            return {
+                'avg_local_std': 0.0,
+                'largest_region_pct': 0.5,
+                'top2_coverage': 0.5,
+                'color_spread': 0.0
+            }
 
     def analyze_texture_uniformity(self, img: np.ndarray) -> Dict[str, float]:
         """
@@ -318,7 +330,7 @@ class ImageValidator:
         # Check if any top prediction is clearly non-medical
         for idx in top_indices:
             confidence = predictions[0][idx]
-            if confidence > 0.3:  # Confidence threshold
+            if confidence > 0.5:  # Higher confidence threshold to reduce false positives
                 if idx in self.non_skin_classes:
                     return False, confidence, self.non_skin_classes[idx]
         
@@ -378,85 +390,83 @@ class ImageValidator:
             'warnings': []
         }
         
-        # Check 1: Validate dimensions
+        # Check 1: Validate dimensions only
         dim_valid, dim_msg = self.validate_image_dimensions(img)
         if not dim_valid:
             results['is_valid'] = False
             results['reasons'].append(dim_msg)
             results['confidence'] *= 0.1
             return results
-        
-        # Check 2: Detect text/document
+
+        # Check 2: Detect text/document - only warn, don't reject
         if self.detect_text_presence(img):
-            results['is_valid'] = False
-            results['reasons'].append("Image appears to be a document or screenshot")
-            results['confidence'] *= 0.2
-            return results
-        
-        # Check 3: MobileNet classification
+            results['warnings'].append("Image may contain text or document-like patterns")
+            results['confidence'] *= 0.9
+
+        # Check 3: MobileNet classification - only reject with very high confidence
         is_skin, mobilenet_conf, detected_class = self.classify_with_mobilenet(img)
-        if not is_skin:
+        if not is_skin and mobilenet_conf > 0.6:  # Only reject if very confident
             results['is_valid'] = False
             results['reasons'].append(f"Image detected as '{detected_class}' with {mobilenet_conf*100:.1f}% confidence")
             results['confidence'] *= (1 - mobilenet_conf)
             return results
-        
-        # Check 4: Skin presence detection
-        skin_ratio = self.detect_skin_presence(img)
-        if skin_ratio < 0.01:  # Less than 1% skin-like pixels - very lenient
-            results['warnings'].append(f"Very low skin presence detected ({skin_ratio*100:.1f}%)")
-            results['confidence'] *= 0.7
-        elif skin_ratio < 0.1:
-            results['warnings'].append(f"Low skin presence detected ({skin_ratio*100:.1f}%)")
+        elif not is_skin:
+            results['warnings'].append(f"Image may be '{detected_class}' ({mobilenet_conf*100:.1f}% confidence)")
             results['confidence'] *= 0.9
-        
-        # Check 5: Color statistics
+
+        # Check 4: Skin presence detection - informational only
+        skin_ratio = self.detect_skin_presence(img)
+        if skin_ratio < 0.01:
+            results['warnings'].append(f"Very low skin-tone presence ({skin_ratio*100:.1f}%)")
+            results['confidence'] *= 0.95
+
+        # Check 5: Color statistics - very lenient
         color_stats = self.analyze_color_statistics(img)
 
-        # Check for unnatural images (cartoons, drawings)
-        if color_stats['unique_colors'] < 100:
+        # Only reject obvious drawings/icons with very few colors
+        if color_stats['unique_colors'] < 30:
             results['is_valid'] = False
-            results['reasons'].append("Image appears to be a drawing or cartoon (too few unique colors)")
+            results['reasons'].append("Image appears to be an icon or simple graphic (too few colors)")
             results['confidence'] *= 0.2
             return results
 
-        # Check for overly saturated images (likely non-medical)
+        # Check for overly saturated images (likely non-medical) - just warn
         if color_stats['mean_saturation'] > 200:
             results['warnings'].append("Image has unusually high saturation")
-            results['confidence'] *= 0.8
+            results['confidence'] *= 0.98
 
-        # Check edge density (text or technical drawings have high edge density)
+        # Check edge density - just warn
         if color_stats['edge_density'] > 0.3:
             results['warnings'].append("High edge density detected")
-            results['confidence'] *= 0.85
+            results['confidence'] *= 0.98
 
-        # Check 6: Uniform color regions (informational only - don't reject)
+        # Check 6: Uniform color regions (informational only)
         uniform_stats = self.detect_uniform_regions(img)
 
-        # Just warn on fragmented images, don't reject
+        # Just warn on fragmented images
         if uniform_stats['largest_region_pct'] < 0.08:
             results['warnings'].append(
                 f"Low uniform color areas ({uniform_stats['largest_region_pct']*100:.1f}% largest region)"
             )
-            results['confidence'] *= 0.9
+            results['confidence'] *= 0.98
 
-        # Just warn on busy/colorful images, don't reject
+        # Just warn on busy/colorful images
         if uniform_stats['top2_coverage'] < 0.25:
             results['warnings'].append(
                 f"High color diversity ({uniform_stats['top2_coverage']*100:.1f}% top-2 color coverage)"
             )
-            results['confidence'] *= 0.9
+            results['confidence'] *= 0.98
 
         # Check 7: Texture uniformity analysis (informational only)
         texture_stats = self.analyze_texture_uniformity(img)
 
-        # Just warn on unusual patterns, don't reject
+        # Just warn on unusual patterns
         if texture_stats['freq_ratio'] > 150:
             results['warnings'].append("Unusual texture patterns detected")
-            results['confidence'] *= 0.95
+            results['confidence'] *= 0.98
 
-        # Final validation - very lenient threshold
-        if results['confidence'] < 0.3:
+        # Final validation - extremely lenient threshold
+        if results['confidence'] < 0.2:
             results['is_valid'] = False
             if not results['reasons']:
                 results['reasons'].append("Image characteristics inconsistent with skin lesion imagery")
