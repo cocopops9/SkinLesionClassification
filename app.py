@@ -1,5 +1,5 @@
 """
-Enhanced Melanoma Detection Application
+Skin Lesion Classification Application
 Features:
 - User authentication system
 - User-specific image storage
@@ -29,7 +29,7 @@ from image_validator import ImageValidator
 
 # Configure Streamlit
 st.set_page_config(
-    page_title='Enhanced Melanoma Detection System',
+    page_title='Skin Lesion Classification',
     page_icon='🔬',
     layout='wide',
     initial_sidebar_state='expanded'
@@ -70,7 +70,7 @@ def create_user_directory(user_id: str):
 
 def login_page():
     """Display login/registration page."""
-    st.title("🔬 Enhanced Melanoma Detection System")
+    st.title("🔬 Skin Lesion Classification")
     st.markdown("### Secure Medical Image Analysis Platform")
     
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -220,7 +220,7 @@ def main_application():
 def analysis_page(classifier, validator, selected_models, 
                   show_explainability, show_heatmap, save_to_history):
     """New analysis page for image upload and classification."""
-    st.title("🔬 Melanoma Detection Analysis")
+    st.title("🔬 Skin Lesion Analysis")
     
     # Warning disclaimer
     st.warning("""
@@ -400,7 +400,7 @@ def analysis_page(classifier, validator, selected_models,
             # Explainability section
             if show_explainability and explanation_text:
                 st.divider()
-                st.subheader("🧠 AI Explanation")
+                st.subheader("🧠 Explanation")
                 st.markdown(explanation_text)
                 
                 if show_heatmap and heatmap_path and heatmap_path.exists():
@@ -552,7 +552,7 @@ def history_page():
         # Show explanation if available
         if selected_image.explanation_text:
             st.divider()
-            st.subheader("AI Explanation")
+            st.subheader("Explanation")
             st.markdown(selected_image.explanation_text)
 
         # Management actions
@@ -658,7 +658,7 @@ def about_page():
     st.title("ℹ️ About")
     
     st.markdown("""
-    ## Enhanced Melanoma Detection System
+    ## Skin Lesion Classification
     
     This advanced medical image analysis system provides:
     
