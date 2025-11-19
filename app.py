@@ -459,23 +459,19 @@ def history_page():
     
     # Statistics
     st.subheader("📊 Statistics")
-    col1, col2, col3, col4 = st.columns(4)
-    
+    col1, col2, col3 = st.columns(3)
+
     total_analyses = len(images)
     valid_analyses = sum(1 for img in images if img.is_valid_skin_image)
     malignant_count = sum(1 for img in images if img.lesion_type and "Malignant" in img.lesion_type)
-    
+
     with col1:
         st.metric("Total Analyses", total_analyses)
     with col2:
         st.metric("Valid Images", valid_analyses)
     with col3:
         st.metric("Malignant Findings", malignant_count)
-    with col4:
-        avg_confidence = np.mean([img.get_confidence_scores().get(img.diagnosis, 0) 
-                                 for img in images if img.diagnosis]) * 100 if images else 0
-        st.metric("Avg Confidence", f"{avg_confidence:.1f}%")
-    
+
     st.divider()
     
     # History table
@@ -595,6 +591,9 @@ def history_page():
                         if success:
                             st.success("Deleted successfully")
                             del st.session_state[f"confirm_delete_{selected_image.id}"]
+                            # Reset selection to update statistics
+                            if "history_selection" in st.session_state:
+                                del st.session_state["history_selection"]
                             st.rerun()
                         else:
                             st.error("Failed to delete")
