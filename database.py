@@ -210,6 +210,51 @@ class DatabaseManager:
         finally:
             session.close()
 
+    @staticmethod
+    def update_image_filename(image_id: str, new_filename: str) -> bool:
+        """Update the filename of an image record."""
+        session = SessionLocal()
+        try:
+            record = session.query(ImageRecord).filter_by(id=image_id).first()
+            if record:
+                record.filename = new_filename
+                session.commit()
+                return True
+            return False
+        except Exception as e:
+            session.rollback()
+            print(f"Error updating filename: {e}")
+            return False
+        finally:
+            session.close()
+
+    @staticmethod
+    def delete_image_record(image_id: str) -> bool:
+        """Delete an image record and optionally its file."""
+        session = SessionLocal()
+        try:
+            record = session.query(ImageRecord).filter_by(id=image_id).first()
+            if record:
+                # Optionally delete the file
+                from pathlib import Path
+                file_path = Path(record.file_path)
+                if file_path.exists():
+                    try:
+                        file_path.unlink()
+                    except Exception as e:
+                        print(f"Warning: Could not delete file {file_path}: {e}")
+
+                session.delete(record)
+                session.commit()
+                return True
+            return False
+        except Exception as e:
+            session.rollback()
+            print(f"Error deleting record: {e}")
+            return False
+        finally:
+            session.close()
+
 
 # Initialize database on module import
 DatabaseManager.init_db()

@@ -529,7 +529,7 @@ def history_page():
                 st.write(f"**Lesion Type:** {selected_image.lesion_type}")
                 st.write(f"**Model Used:** {selected_image.model_used}")
                 st.write(f"**Processing Time:** {selected_image.processing_time:.2f}s")
-                
+
                 # Show confidence scores
                 if selected_image.confidence_scores:
                     scores = selected_image.get_confidence_scores()
@@ -538,12 +538,56 @@ def history_page():
                         st.write(f"  • {k}: {v*100:.1f}%")
             else:
                 st.error(f"Invalid image: {selected_image.validation_message}")
-        
+
         # Show explanation if available
         if selected_image.explanation_text:
             st.divider()
             st.subheader("AI Explanation")
             st.markdown(selected_image.explanation_text)
+
+        # Management actions
+        st.divider()
+        st.subheader("Actions")
+
+        col_action1, col_action2, col_action3 = st.columns(3)
+
+        with col_action1:
+            # Rename functionality
+            new_name = st.text_input(
+                "Rename file",
+                value=selected_image.filename,
+                key=f"rename_{selected_image.id}"
+            )
+            if st.button("Rename", key=f"rename_btn_{selected_image.id}"):
+                if new_name and new_name != selected_image.filename:
+                    success = DatabaseManager.update_image_filename(selected_image.id, new_name)
+                    if success:
+                        st.success(f"Renamed to: {new_name}")
+                        st.rerun()
+                    else:
+                        st.error("Failed to rename")
+
+        with col_action2:
+            # Delete functionality
+            if st.button("🗑️ Delete", key=f"delete_btn_{selected_image.id}", type="secondary"):
+                st.session_state[f"confirm_delete_{selected_image.id}"] = True
+
+            if st.session_state.get(f"confirm_delete_{selected_image.id}", False):
+                st.warning("Are you sure you want to delete this analysis?")
+                col_yes, col_no = st.columns(2)
+                with col_yes:
+                    if st.button("Yes, delete", key=f"confirm_yes_{selected_image.id}"):
+                        success = DatabaseManager.delete_image_record(selected_image.id)
+                        if success:
+                            st.success("Deleted successfully")
+                            del st.session_state[f"confirm_delete_{selected_image.id}"]
+                            st.rerun()
+                        else:
+                            st.error("Failed to delete")
+                with col_no:
+                    if st.button("Cancel", key=f"confirm_no_{selected_image.id}"):
+                        del st.session_state[f"confirm_delete_{selected_image.id}"]
+                        st.rerun()
 
 
 def settings_page():
