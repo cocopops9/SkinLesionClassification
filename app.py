@@ -495,21 +495,35 @@ def history_page():
         })
     
     df = pd.DataFrame(history_data)
-    
-    # Display with selection
-    selected = st.dataframe(
+
+    # Display the table
+    st.dataframe(
         df,
         use_container_width=True,
-        hide_index=True,
-        selection_mode="single-row",
-        on_select="rerun"
+        hide_index=True
     )
-    
-    # Show details for selected row
-    if selected and selected.selection.rows:
-        selected_idx = selected.selection.rows[0]
+
+    # Selection dropdown
+    st.divider()
+    st.subheader("Select an Analysis to View/Manage")
+
+    # Create selection options
+    selection_options = ["-- Select an analysis --"] + [
+        f"{img.id[:8]} - {img.filename} ({img.upload_time.strftime('%Y-%m-%d %H:%M')})"
+        for img in images
+    ]
+
+    selected_option = st.selectbox(
+        "Choose an analysis:",
+        selection_options,
+        key="history_selection"
+    )
+
+    # Show details for selected item
+    if selected_option != "-- Select an analysis --":
+        selected_idx = selection_options.index(selected_option) - 1  # -1 for the placeholder
         selected_image = images[selected_idx]
-        
+
         st.divider()
         st.subheader(f"Details for Analysis {selected_image.id[:8]}")
         
