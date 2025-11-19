@@ -5,9 +5,6 @@ Uses a combination of CNN-based classification and statistical analysis.
 
 import numpy as np
 import cv2
-import tensorflow as tf
-from tensorflow.keras.applications import MobileNetV2
-from tensorflow.keras.preprocessing import image
 from typing import Tuple, Dict, Optional
 from PIL import Image
 import io
@@ -29,9 +26,7 @@ class ImageValidator:
     """
     
     def __init__(self):
-        """Initialize the validator with pre-trained MobileNetV2 and CLIP."""
-        self.mobilenet = MobileNetV2(weights='imagenet', include_top=True)
-
+        """Initialize the validator with CLIP for zero-shot classification."""
         # Initialize CLIP for zero-shot classification
         self.clip_available = CLIP_AVAILABLE
         if CLIP_AVAILABLE:
@@ -56,72 +51,6 @@ class ImageValidator:
             except Exception as e:
                 print(f"Warning: Failed to initialize CLIP: {e}")
                 self.clip_available = False
-        
-        # ImageNet classes related to skin/medical imagery
-        self.medical_classes = {
-            919: 'band_aid',
-            445: 'syringe',
-            917: 'washbasin',
-            639: 'lab_coat'
-        }
-
-        # MINIMAL VALIDATION: Only reject cats and dogs
-        # These are the most common non-medical uploads and MobileNet recognizes them well
-        # All other classes removed - too unreliable
-        self.non_skin_classes = {
-            # Cats - all cat breeds
-            281: 'tabby_cat', 282: 'tiger_cat', 283: 'Persian_cat',
-            284: 'Siamese_cat', 285: 'Egyptian_cat', 286: 'cougar',
-            287: 'lynx', 288: 'leopard', 289: 'snow_leopard',
-            290: 'jaguar', 291: 'lion', 292: 'tiger', 293: 'cheetah',
-            # Dogs - common breeds
-            151: 'Chihuahua', 152: 'Japanese_spaniel', 153: 'Maltese_dog',
-            154: 'Pekinese', 155: 'Shih-Tzu', 156: 'Blenheim_spaniel',
-            157: 'papillon', 158: 'toy_terrier', 159: 'Rhodesian_ridgeback',
-            160: 'Afghan_hound', 161: 'basset', 162: 'beagle',
-            163: 'bloodhound', 164: 'bluetick', 165: 'black-and-tan_coonhound',
-            166: 'Walker_hound', 167: 'English_foxhound', 168: 'redbone',
-            169: 'borzoi', 170: 'Irish_wolfhound', 171: 'Italian_greyhound',
-            172: 'whippet', 173: 'Ibizan_hound', 174: 'Norwegian_elkhound',
-            175: 'otterhound', 176: 'Saluki', 177: 'Scottish_deerhound',
-            178: 'Weimaraner', 179: 'Staffordshire_bullterrier',
-            180: 'American_Staffordshire_terrier', 181: 'Bedlington_terrier',
-            182: 'Border_terrier', 183: 'Kerry_blue_terrier',
-            184: 'Irish_terrier', 185: 'Norfolk_terrier', 186: 'Norwich_terrier',
-            187: 'Yorkshire_terrier', 188: 'wire-haired_fox_terrier',
-            189: 'Lakeland_terrier', 190: 'Sealyham_terrier', 191: 'Airedale',
-            192: 'cairn', 193: 'Australian_terrier', 194: 'Dandie_Dinmont',
-            195: 'Boston_bull', 196: 'miniature_schnauzer', 197: 'giant_schnauzer',
-            198: 'standard_schnauzer', 199: 'Scotch_terrier',
-            200: 'Tibetan_terrier', 201: 'silky_terrier',
-            202: 'soft-coated_wheaten_terrier', 203: 'West_Highland_white_terrier',
-            204: 'Lhasa', 205: 'flat-coated_retriever', 206: 'curly-coated_retriever',
-            207: 'golden_retriever', 208: 'Labrador_retriever',
-            209: 'Chesapeake_Bay_retriever', 210: 'German_short-haired_pointer',
-            211: 'vizsla', 212: 'English_setter', 213: 'Irish_setter',
-            214: 'Gordon_setter', 215: 'Brittany_spaniel', 216: 'clumber',
-            217: 'English_springer', 218: 'Welsh_springer_spaniel',
-            219: 'cocker_spaniel', 220: 'Sussex_spaniel', 221: 'Irish_water_spaniel',
-            222: 'kuvasz', 223: 'schipperke', 224: 'groenendael',
-            225: 'malinois', 226: 'briard', 227: 'kelpie', 228: 'komondor',
-            229: 'Old_English_sheepdog', 230: 'Shetland_sheepdog', 231: 'collie',
-            232: 'Border_collie', 233: 'Bouvier_des_Flandres', 234: 'Rottweiler',
-            235: 'German_shepherd', 236: 'Doberman', 237: 'miniature_pinscher',
-            238: 'Greater_Swiss_Mountain_dog', 239: 'Bernese_mountain_dog',
-            240: 'Appenzeller', 241: 'EntleBucher', 242: 'boxer', 243: 'bull_mastiff',
-            244: 'Tibetan_mastiff', 245: 'French_bulldog', 246: 'Great_Dane',
-            247: 'Saint_Bernard', 248: 'Eskimo_dog', 249: 'malamute',
-            250: 'Siberian_husky', 251: 'dalmatian', 252: 'affenpinscher',
-            253: 'basenji', 254: 'pug', 255: 'Leonberg', 256: 'Newfoundland',
-            257: 'Great_Pyrenees', 258: 'Samoyed', 259: 'Pomeranian',
-            260: 'chow', 261: 'keeshond', 262: 'Brabancon_griffon',
-            263: 'Pembroke', 264: 'Cardigan', 265: 'toy_poodle',
-            266: 'miniature_poodle', 267: 'standard_poodle',
-            268: 'Mexican_hairless',
-        }
-
-        # Remove skin detection - not reliable for medical images
-        # HSV ranges removed as they don't work for dermoscopic images
     
     def validate_image_dimensions(self, img: np.ndarray) -> Tuple[bool, str]:
         """
@@ -377,40 +306,6 @@ class ImageValidator:
             'gradient_cv': gradient_cv,
             'freq_ratio': freq_ratio
         }
-    
-    def classify_with_mobilenet(self, img: np.ndarray) -> Tuple[bool, float, str]:
-        """
-        MINIMAL VALIDATION: Only reject clear cat/dog photos.
-
-        After 5 failed approaches, this uses the simplest possible logic:
-        - Only check for cats and dogs (most common non-medical uploads)
-        - Use low threshold (40%) because MobileNet is good at these
-        - Accept everything else
-
-        Args:
-            img: Input image in RGB format
-
-        Returns:
-            Tuple of (is_likely_skin, confidence, detected_class)
-        """
-        # Preprocess for MobileNetV2
-        img_resized = cv2.resize(img, (224, 224))
-        img_array = np.expand_dims(img_resized, axis=0)
-        img_array = tf.keras.applications.mobilenet_v2.preprocess_input(img_array)
-
-        # Get predictions
-        predictions = self.mobilenet.predict(img_array, verbose=0)
-        top_indices = np.argsort(predictions[0])[::-1][:5]
-
-        # Check top-5 predictions for cats/dogs with 40% threshold
-        # Lower threshold because MobileNet is well-trained on animals
-        for idx in top_indices:
-            confidence = predictions[0][idx]
-            if confidence > 0.40 and idx in self.non_skin_classes:
-                return False, confidence, self.non_skin_classes[idx]
-
-        # Accept everything else
-        return True, 0.0, "accepted"
 
     def validate_with_clip(self, img: np.ndarray) -> Tuple[bool, float, str]:
         """
@@ -454,10 +349,10 @@ class ImageValidator:
 
             # Simple threshold check
             if medical_prob >= self.binary_threshold:
-                reason = f"Medical skin image ({medical_prob*100:.1f}% confidence)"
+                reason = "Valid skin lesion image"
                 return True, medical_prob, reason
             else:
-                reason = f"Not a medical skin image ({non_medical_prob*100:.1f}% non-medical vs {medical_prob*100:.1f}% medical)"
+                reason = "Image may not be a valid skin lesion"
                 return False, non_medical_prob, reason
 
         except Exception as e:
@@ -553,7 +448,7 @@ class ImageValidator:
         except Exception:
             pass
 
-        # Check 3: CLIP-based semantic classification (PRIMARY METHOD)
+        # Check 3: CLIP-based semantic classification
         if self.clip_available:
             is_medical, clip_confidence, clip_reason = self.validate_with_clip(img)
             if not is_medical:
@@ -566,20 +461,10 @@ class ImageValidator:
                 results['confidence'] = clip_confidence
                 return results
         else:
-            # Fallback: MobileNet classification for cats/dogs only
-            results['warnings'].append("CLIP not available - using limited MobileNet validation")
-            is_valid_type, mobilenet_conf, detected_class = self.classify_with_mobilenet(img)
-            if not is_valid_type:
-                results['is_valid'] = False
-                results['reasons'].append(
-                    f"Image detected as '{detected_class}' with {mobilenet_conf*100:.1f}% confidence"
-                )
-                results['confidence'] = 1.0 - mobilenet_conf
-                return results
-
-        # Image passed all checks
-        results['confidence'] = 1.0
-        return results
+            # CLIP not available - accept but warn
+            results['warnings'].append("CLIP not available - validation skipped")
+            results['confidence'] = 0.5
+            return results
     
     def generate_validation_report(self, validation_results: Dict[str, any]) -> str:
         """
@@ -593,26 +478,18 @@ class ImageValidator:
         """
         if validation_results['is_valid']:
             report = "✅ **Image Validation: PASSED**\n\n"
-            report += f"Confidence: {validation_results['confidence']*100:.1f}%\n"
-            
+
             if validation_results['warnings']:
-                report += "\n**Warnings:**\n"
+                report += "**Warnings:**\n"
                 for warning in validation_results['warnings']:
                     report += f"⚠️ {warning}\n"
             else:
-                report += "\nImage appears to be a valid skin lesion photograph.\n"
+                report += "Image appears to be a valid skin lesion photograph.\n"
         else:
-            report = "❌ **Image Validation: FAILED**\n\n"
-            report += "**Invalid Image Detected:**\n"
-            for reason in validation_results['reasons']:
-                report += f"• {reason}\n"
-            
-            report += "\n**Recommendation:**\n"
-            report += "Please upload a clear photograph or dermoscopic image of a skin lesion.\n"
-            report += "Ensure the image:\n"
-            report += "• Shows skin surface clearly\n"
-            report += "• Is well-lit and in focus\n"
-            report += "• Contains no text or overlays\n"
-            report += "• Is a medical/clinical photograph\n"
-        
+            report = "⚠️ **Image Validation Warning**\n\n"
+            report += "The uploaded image may not be a valid skin lesion photograph.\n"
+            report += "Predictions on this image may not be reliable.\n\n"
+            report += "If you are sure this is a valid skin lesion image, "
+            report += "you can confirm below to proceed with the analysis.\n"
+
         return report

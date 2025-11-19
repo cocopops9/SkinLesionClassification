@@ -264,16 +264,33 @@ def analysis_page(classifier, validator, selected_models,
         with col2:
             st.image(img, caption="Uploaded Image", width=400)
         
+        # Step 1: Validate image
+        with st.spinner("Validating image..."):
+            validation_results = validator.validate_image(img)
+            validation_report = validator.generate_validation_report(validation_results)
+
+        # Show validation result and handle confirmation if needed
+        proceed_with_analysis = False
+
+        if validation_results['is_valid']:
+            st.success("✅ Image validation passed")
+            proceed_with_analysis = True
+        else:
+            st.warning(validation_report)
+            # Add confirmation checkbox
+            confirm_proceed = st.checkbox(
+                "I confirm this is a valid skin lesion image - proceed with analysis",
+                key=f"confirm_{uploaded_file.name}"
+            )
+            if confirm_proceed:
+                proceed_with_analysis = True
+                st.info("Proceeding with analysis as requested. Note: predictions may not be reliable.")
+
         # Analyze button
         if st.button("🔍 Analyze Image", type="primary", use_container_width=True):
-            
-            # Step 1: Validate image
-            with st.spinner("Validating image..."):
-                validation_results = validator.validate_image(img)
-                validation_report = validator.generate_validation_report(validation_results)
-            
-            if not validation_results['is_valid']:
-                st.error(validation_report)
+
+            if not proceed_with_analysis:
+                st.error("Please confirm the image is valid or upload a different image.")
                 # Save invalid image record
                 if save_to_history:
                     image_data = {
@@ -284,8 +301,6 @@ def analysis_page(classifier, validator, selected_models,
                     }
                     DatabaseManager.save_image_record(st.session_state.user.id, image_data)
                 return
-            else:
-                st.success("✅ Image validation passed")
             
             # Step 2: Classification
             with st.spinner("Analyzing skin lesion..."):
