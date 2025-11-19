@@ -221,13 +221,7 @@ def analysis_page(classifier, validator, selected_models,
                   show_explainability, show_heatmap, save_to_history):
     """New analysis page for image upload and classification."""
     st.title("🔬 Skin Lesion Analysis")
-    
-    # Warning disclaimer
-    st.warning("""
-    ⚠️ **MEDICAL DISCLAIMER**: This system is for research purposes only and should NOT be used for medical diagnosis.
-    Always consult with a qualified healthcare professional for medical advice.
-    """)
-    
+
     # File uploader
     col1, col2 = st.columns([2, 1])
     
