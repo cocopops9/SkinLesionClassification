@@ -531,7 +531,7 @@ class ExplainabilityEngine:
         explanation += f"**Confidence Level:** {confidence:.1f}%\n\n"
 
         # Primary diagnostic reasoning
-        explanation += "**Primary Diagnostic Features Detected:**\n"
+        explanation += "**Check for these diagnostic features:**\n"
         for feature in features['key_features']:
             explanation += f"• {feature}\n"
 
