@@ -262,9 +262,9 @@ report = validator.generate_validation_report(results)
 ## Limitations
 
 1. **Medical Disclaimer**
-   - NOT for medical diagnosis
-   - Research/educational purposes only
-   - Requires professional medical consultation
+   - Intelligent decision support system for dermatologists
+   - Only dermatologists are responsible for diagnosis
+   - AI predictions serve as supplementary clinical information
 
 2. **Technical Limitations**
    - SQLite database (not for production scale)
@@ -375,4 +375,4 @@ For technical questions or issues, please create an issue in the repository.
 
 ---
 
-**⚠️ MEDICAL DISCLAIMER**: This system is NOT intended for medical diagnosis. Always consult qualified healthcare professionals for medical advice. The authors assume no liability for decisions made based on this system's output.
+**⚠️ MEDICAL DISCLAIMER**: This is an intelligent decision support system designed to assist dermatologists in their clinical practice. Only qualified dermatologists are responsible for the final diagnosis and treatment decisions. The AI-generated predictions serve as supplementary information and do not replace professional medical judgment. The authors assume no liability for decisions made based on this system's output.

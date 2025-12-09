@@ -106,7 +106,7 @@ def login_page():
                                         help="Minimum 8 characters")
             confirm_password = st.text_input("Confirm Password", type="password", key="reg_confirm")
             
-            terms = st.checkbox("I agree to use this system responsibly and understand it's not for medical diagnosis")
+            terms = st.checkbox("I understand this is a decision support system and that only dermatologists are responsible for diagnosis")
             
             if st.button("Register", type="primary", use_container_width=True):
                 if not all([new_username, new_email, new_password, confirm_password]):
@@ -695,12 +695,13 @@ def about_page():
     - No data sharing with third parties
     
     ### ⚠️ Important Notice
-    
-    **This system is for research and educational purposes only.**
-    
-    It should NOT be used for medical diagnosis. Always consult with qualified healthcare 
-    professionals for medical advice. The predictions provided are based on machine learning 
-    models and may not be accurate.
+
+    **This is an intelligent decision support system for dermatologists.**
+
+    This system assists dermatologists in their clinical assessment. Only qualified
+    dermatologists are responsible for the final diagnosis and treatment decisions.
+    The AI-generated predictions serve as supplementary information and do not replace
+    professional medical judgment.
     
     ### 📈 Technical Specifications
     
