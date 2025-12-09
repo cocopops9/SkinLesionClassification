@@ -270,7 +270,7 @@ def analysis_page(classifier, validator, selected_models,
             st.success("✅ Image validation passed")
             proceed_with_analysis = True
         else:
-            st.warning(validation_report)
+            st.error(validation_report)
             # Add confirmation checkbox
             confirm_proceed = st.checkbox(
                 "I confirm this is a valid skin lesion image - proceed with analysis",
