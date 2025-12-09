@@ -4,6 +4,8 @@
 
 Advanced melanoma detection system with user authentication, explainable AI, and comprehensive image validation. This system provides enterprise-grade features for medical image analysis with full transparency and user management.
 
+**New:** This system now includes full training capabilities - train your own models on custom datasets! See [TRAINING_README.md](TRAINING_README.md) for details.
+
 ## Key Enhancements
 
 ### 1. Authentication System
@@ -40,17 +42,26 @@ Advanced melanoma detection system with user authentication, explainable AI, and
 ## Technical Architecture
 
 ```
-melanoma_enhanced/
-├── app.py                 # Main Streamlit application
-├── database.py           # SQLAlchemy models and database management
-├── classification.py     # Enhanced CNN classifier with ensemble support
-├── explainability.py    # Grad-CAM and explanation generation
-├── image_validator.py   # Non-skin image detection
-├── requirements.txt     # Python dependencies
-├── melanoma_app.db     # SQLite database (auto-created)
-├── models/             # Downloaded model weights
-├── user_uploads/       # User-specific image storage
-└── heatmaps/          # Grad-CAM heatmap storage
+SkinLesionClassification/
+├── app.py                    # Main Streamlit application
+├── database.py              # SQLAlchemy models and database management
+├── classification.py        # Enhanced CNN classifier with ensemble support
+├── explainability.py       # Grad-CAM and explanation generation
+├── image_validator.py      # Non-skin image detection
+├── train.py                # Model training script (NEW)
+├── train_config.py         # Training configuration (NEW)
+├── update_drive_links.py   # Helper to update Drive URLs (NEW)
+├── requirements.txt        # Python dependencies
+├── README.md               # Main documentation
+├── TRAINING_README.md      # Training guide (NEW)
+├── melanoma_app.db        # SQLite database (auto-created)
+├── models/                # Downloaded/trained model weights
+├── trained_models/        # Newly trained models (NEW)
+├── training_logs/         # Training metrics and logs (NEW)
+├── checkpoints/           # Training checkpoints (NEW)
+├── data/                  # Training dataset (user-provided)
+├── user_uploads/          # User-specific image storage
+└── heatmaps/             # Grad-CAM heatmap storage
 ```
 
 ## Installation
@@ -128,6 +139,50 @@ Open browser to `http://localhost:8501`
 - View all previous analyses
 - Filter by date, diagnosis, validity
 - Export data as CSV
+
+## Training Your Own Models
+
+This system now includes comprehensive training capabilities to fine-tune models on custom datasets.
+
+### Quick Start
+
+```bash
+# Train EfficientNetB3 on your dataset
+python train.py --model EfficientNetB3
+
+# Train with custom parameters
+python train.py --model InceptionV3 --epochs1 20 --epochs2 40 --batch-size 16
+```
+
+### Training Features
+
+- **Two-phase transfer learning**: Train classification head first, then fine-tune entire model
+- **Automated data augmentation**: Rotation, flipping, zooming for robustness
+- **Class weight balancing**: Handles imbalanced datasets automatically
+- **Multiple callbacks**: Early stopping, learning rate reduction, model checkpointing
+- **TensorBoard integration**: Real-time training visualization
+- **Flexible configuration**: Customize via `train_config.py`
+
+### Training Pipeline
+
+1. **Prepare HAM10000 dataset** in `data/train/` directory
+2. **Configure training** in `train_config.py`
+3. **Run training**: `python train.py --model EfficientNetB3`
+4. **Monitor progress**: `tensorboard --logdir training_logs/tensorboard`
+5. **Use trained model**: Copy from `trained_models/` to `models/`
+
+**For complete training documentation, see [TRAINING_README.md](TRAINING_README.md)**
+
+### Updating Model Weights
+
+To use models from your Google Drive folder:
+
+```bash
+# Run the helper script
+python update_drive_links.py
+
+# Or manually edit classification.py MODEL_CONFIGS
+```
 
 ## Database Schema
 
