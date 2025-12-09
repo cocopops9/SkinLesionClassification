@@ -706,7 +706,7 @@ def about_page():
     ### 📈 Technical Specifications
     
     - **Framework**: TensorFlow 2.9+
-    - **Models**: EfficientNetB3, InceptionV3, ResNet50, InceptionResNetV2, DenseNet201, NASNet
+    - **Models**: EfficientNetB3, InceptionV3, InceptionResNetV2
     - **Database**: SQLAlchemy with SQLite
     - **Security**: bcrypt password hashing
     - **Explainability**: Grad-CAM, Occlusion Sensitivity

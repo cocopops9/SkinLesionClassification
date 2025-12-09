@@ -117,10 +117,7 @@ Open browser to `http://localhost:8501`
 |-------|----------|------------|------------|
 | EfficientNetB3 | 85% | 224x224 | 12M |
 | InceptionV3 | 84% | 299x299 | 24M |
-| ResNet50 | 79% | 224x224 | 25M |
 | InceptionResNetV2 | 79% | 299x299 | 56M |
-| DenseNet201 | 69% | 224x224 | 20M |
-| NASNet | 69% | 331x331 | 89M |
 
 #### Analysis Options
 - **Explainability Report**: Detailed AI reasoning

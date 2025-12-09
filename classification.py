@@ -39,29 +39,11 @@ class MelanomaClassifier:
             'img_size': 299,
             'accuracy': 0.84
         },
-        'ResNet50': {
-            'url': 'https://drive.google.com/uc?id=16-L3FaZUhWedQy2WagEfILv2-XwGazZO',
-            'filename': 'ResNet50.h5',
-            'img_size': 224,
-            'accuracy': 0.79
-        },
         'InceptionResNetV2': {
             'url': 'https://drive.google.com/uc?id=14xPWqyeiz4S2XPiizEeDTTEQn5sSYBbE',
             'filename': 'InceptionResNetv2.h5',
             'img_size': 299,
             'accuracy': 0.79
-        },
-        'DenseNet201': {
-            'url': 'https://drive.google.com/uc?id=1HfETcESJHpnEZ-x0dj2AZfqM3dCGs8EZ',
-            'filename': 'DenseNet201.h5',
-            'img_size': 224,
-            'accuracy': 0.69
-        },
-        'NASNet': {
-            'url': 'https://drive.google.com/uc?id=1OGV-ZS2VtJJ_EK2oAB1IXp-jFqgWC1zU',
-            'filename': 'NasNetLarge.h5',
-            'img_size': 331,
-            'accuracy': 0.69
         }
     }
     
@@ -132,14 +114,8 @@ class MelanomaClassifier:
             from tensorflow.keras.applications.efficientnet import EfficientNetB3 as BaseModel
         elif model_name == 'InceptionV3':
             from tensorflow.keras.applications.inception_v3 import InceptionV3 as BaseModel
-        elif model_name == 'ResNet50':
-            from tensorflow.keras.applications.resnet import ResNet50 as BaseModel
         elif model_name == 'InceptionResNetV2':
             from tensorflow.keras.applications.inception_resnet_v2 import InceptionResNetV2 as BaseModel
-        elif model_name == 'DenseNet201':
-            from tensorflow.keras.applications.densenet import DenseNet201 as BaseModel
-        elif model_name == 'NASNet':
-            from tensorflow.keras.applications.nasnet import NASNetLarge as BaseModel
         
         # Build architecture
         base_model = BaseModel(
@@ -204,14 +180,8 @@ class MelanomaClassifier:
             from tensorflow.keras.applications.efficientnet import preprocess_input
         elif model_name == 'InceptionV3':
             from tensorflow.keras.applications.inception_v3 import preprocess_input
-        elif model_name == 'ResNet50':
-            from tensorflow.keras.applications.resnet import preprocess_input
         elif model_name == 'InceptionResNetV2':
             from tensorflow.keras.applications.inception_resnet_v2 import preprocess_input
-        elif model_name == 'DenseNet201':
-            from tensorflow.keras.applications.densenet import preprocess_input
-        elif model_name == 'NASNet':
-            from tensorflow.keras.applications.nasnet import preprocess_input
         
         img_array = preprocess_input(img_array)
         img_array = img_array / 255.0
