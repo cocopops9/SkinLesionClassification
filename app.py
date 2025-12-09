@@ -323,19 +323,18 @@ def analysis_page(classifier, validator, selected_models,
                         model, img_preprocessed, prediction_data['predicted_class']
                     )
                     
-                    # Compute other metrics
+                    # Compute color metrics
                     color_metrics = ExplainabilityEngine.analyze_color_distribution(img_array)
-                    asymmetry_score = ExplainabilityEngine.detect_asymmetry(img_array)
-                    
-                    # Generate explanation
-                    scores_array = np.array([prediction_data['confidence_scores'][k] 
+
+                    # Generate explanation with ABCDE analysis
+                    scores_array = np.array([prediction_data['confidence_scores'][k]
                                             for k in ['AKIEC', 'BCC', 'BKL', 'DF', 'MEL', 'NV', 'VASC']])
-                    
+
                     explanation_text = ExplainabilityEngine.generate_explanation(
                         prediction_data['predicted_class'],
                         scores_array,
                         color_metrics,
-                        asymmetry_score
+                        img_array  # Pass image for ABCDE computation
                     )
                     
                     if show_heatmap:
@@ -347,7 +346,19 @@ def analysis_page(classifier, validator, selected_models,
             # Display results
             st.divider()
             st.subheader("📊 Analysis Results")
-            
+
+            # Malignant lesion alert
+            if prediction_data['predicted_class'] in [0, 1, 4]:  # AKIEC, BCC, Melanoma
+                st.error("""
+                ⚠️ **ALERT: Potentially Malignant or Pre-Malignant Lesion Detected**
+
+                This analysis suggests a lesion that may require immediate medical attention.
+                **Please consult a qualified dermatologist as soon as possible for proper evaluation.**
+
+                Remember: This is a decision support tool, not a diagnostic device.
+                Only a dermatologist can provide a definitive diagnosis.
+                """)
+
             # Main diagnosis
             col1, col2, col3 = st.columns(3)
             

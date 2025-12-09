@@ -305,6 +305,146 @@ class ExplainabilityEngine:
         return metrics
     
     @staticmethod
+    def detect_border_irregularity(img: np.ndarray) -> float:
+        """
+        Compute border irregularity score for lesion (ABCDE criterion B).
+
+        Args:
+            img: Input image
+
+        Returns:
+            Border irregularity score (0-1, higher = more irregular)
+        """
+        # Convert to grayscale if needed
+        if len(img.shape) == 3:
+            gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = img
+
+        # Find contours
+        _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        if not contours:
+            return 0.0
+
+        # Get largest contour
+        largest_contour = max(contours, key=cv2.contourArea)
+
+        # Compute perimeter and area
+        perimeter = cv2.arcLength(largest_contour, True)
+        area = cv2.contourArea(largest_contour)
+
+        if area == 0:
+            return 0.0
+
+        # Circularity: 4π * area / perimeter²
+        # Perfect circle = 1.0, irregular shape < 1.0
+        circularity = (4 * np.pi * area) / (perimeter * perimeter + 1e-10)
+
+        # Convert to irregularity score (inverse of circularity)
+        irregularity_score = 1.0 - circularity
+
+        return min(max(irregularity_score, 0.0), 1.0)
+
+    @staticmethod
+    def compute_diameter(img: np.ndarray, pixels_per_mm: float = 10.0) -> float:
+        """
+        Compute lesion diameter (ABCDE criterion D).
+
+        Args:
+            img: Input image
+            pixels_per_mm: Calibration factor (default assumes ~10 pixels/mm)
+
+        Returns:
+            Estimated diameter in millimeters
+        """
+        # Convert to grayscale if needed
+        if len(img.shape) == 3:
+            gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = img
+
+        # Find contours
+        _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        if not contours:
+            return 0.0
+
+        # Get largest contour
+        largest_contour = max(contours, key=cv2.contourArea)
+
+        # Get bounding rectangle
+        x, y, w, h = cv2.boundingRect(largest_contour)
+
+        # Diameter = maximum dimension in pixels / pixels_per_mm
+        diameter_pixels = max(w, h)
+        diameter_mm = diameter_pixels / pixels_per_mm
+
+        return diameter_mm
+
+    @staticmethod
+    def compute_abcde_criteria(img: np.ndarray, color_metrics: Dict[str, float]) -> Dict[str, any]:
+        """
+        Compute all ABCDE criteria for comprehensive lesion analysis.
+
+        Args:
+            img: Input image
+            color_metrics: Pre-computed color distribution metrics
+
+        Returns:
+            Dictionary with all ABCDE scores and interpretations
+        """
+        # A - Asymmetry
+        asymmetry_score = ExplainabilityEngine.detect_asymmetry(img)
+        asymmetry_status = "High" if asymmetry_score > 0.3 else "Low"
+
+        # B - Border irregularity
+        border_score = ExplainabilityEngine.detect_border_irregularity(img)
+        border_status = "Irregular" if border_score > 0.4 else "Regular"
+
+        # C - Color variation
+        color_variance = color_metrics.get('color_variance', 0)
+        color_score = min(color_variance / 2000.0, 1.0)  # Normalize to 0-1
+        color_status = "Multiple colors" if color_variance > 1000 else "Uniform"
+
+        # D - Diameter
+        diameter_mm = ExplainabilityEngine.compute_diameter(img)
+        diameter_status = ">6mm" if diameter_mm > 6.0 else "≤6mm"
+
+        # E - Evolution (not computable from single image)
+        evolution_status = "Not assessed (single timepoint)"
+
+        return {
+            'asymmetry': {
+                'score': asymmetry_score,
+                'status': asymmetry_status,
+                'criterion': 'A'
+            },
+            'border': {
+                'score': border_score,
+                'status': border_status,
+                'criterion': 'B'
+            },
+            'color': {
+                'score': color_score,
+                'variance': color_variance,
+                'status': color_status,
+                'criterion': 'C'
+            },
+            'diameter': {
+                'value_mm': diameter_mm,
+                'status': diameter_status,
+                'criterion': 'D'
+            },
+            'evolution': {
+                'status': evolution_status,
+                'criterion': 'E'
+            }
+        }
+
+    @staticmethod
     def detect_asymmetry(img: np.ndarray) -> float:
         """
         Compute asymmetry score for lesion (ABCDE criterion A).
@@ -359,73 +499,83 @@ class ExplainabilityEngine:
     @staticmethod
     def generate_explanation(pred_index: int, confidence_scores: np.ndarray,
                             color_metrics: Dict[str, float],
-                            asymmetry_score: float) -> str:
+                            img: np.ndarray) -> str:
         """
-        Generate comprehensive textual explanation for prediction.
-        
+        Generate comprehensive textual explanation for prediction with full ABCDE analysis.
+
         Args:
             pred_index: Predicted class index
             confidence_scores: Array of confidence scores for all classes
             color_metrics: Color distribution metrics
-            asymmetry_score: Asymmetry measurement
-        
+            img: Original image for ABCDE computation
+
         Returns:
             Detailed explanation text
         """
-        diagnosis_names = ['Actinic Keratosis', 'Basal Cell Carcinoma', 
-                          'Benign Keratosis', 'Dermatofibroma', 
+        diagnosis_names = ['Actinic Keratosis', 'Basal Cell Carcinoma',
+                          'Benign Keratosis', 'Dermatofibroma',
                           'Melanoma', 'Melanocytic Nevus', 'Vascular Lesion']
-        
+
         features = ExplainabilityEngine.DERMOSCOPIC_FEATURES[pred_index]
         confidence = confidence_scores[pred_index] * 100
-        
+
+        # Compute ABCDE criteria
+        abcde = ExplainabilityEngine.compute_abcde_criteria(img, color_metrics)
+
         explanation = f"**Diagnostic Analysis for {diagnosis_names[pred_index]}**\n\n"
+
+        # Add malignant warning if applicable
+        if pred_index in [0, 1, 4]:  # Malignant/pre-malignant conditions
+            explanation += "⚠️ **ALERT: Potentially Malignant Lesion Detected**\n\n"
+
         explanation += f"**Confidence Level:** {confidence:.1f}%\n\n"
-        
+
         # Primary diagnostic reasoning
         explanation += "**Primary Diagnostic Features Detected:**\n"
         for feature in features['key_features']:
             explanation += f"• {feature}\n"
-        
+
         # Clinical correlation
         explanation += f"\n**Clinical Correlation:**\n"
         for sign in features['clinical_signs'][:2]:
             explanation += f"• {sign}\n"
-        
-        # Quantitative analysis
-        explanation += f"\n**Quantitative Analysis:**\n"
-        explanation += f"• Asymmetry Score: {asymmetry_score:.2f} "
-        explanation += f"({'High' if asymmetry_score > 0.3 else 'Low'})\n"
-        
-        # Color analysis interpretation
-        if pred_index == 4:  # Melanoma
+
+        # ABCDE Criteria Analysis
+        explanation += f"\n**ABCDE Criteria Analysis:**\n"
+        explanation += f"• **A - Asymmetry:** {abcde['asymmetry']['score']:.2f} ({abcde['asymmetry']['status']})\n"
+        explanation += f"• **B - Border:** {abcde['border']['score']:.2f} ({abcde['border']['status']})\n"
+        explanation += f"• **C - Color:** Variance {abcde['color']['variance']:.0f} ({abcde['color']['status']})\n"
+        explanation += f"• **D - Diameter:** {abcde['diameter']['value_mm']:.1f}mm ({abcde['diameter']['status']})\n"
+        explanation += f"• **E - Evolution:** {abcde['evolution']['status']}\n"
+
+        # Additional quantitative details
+        if pred_index == 4:  # Melanoma - show additional details
+            explanation += f"\n**Additional Quantitative Details:**\n"
             explanation += f"• Blue-white areas: {color_metrics['blue_white_presence']*100:.1f}%\n"
-            explanation += f"• Color variance: {color_metrics['color_variance']:.1f} "
-            explanation += f"({'High' if color_metrics['color_variance'] > 1000 else 'Low'})\n"
-        
+            if color_metrics['blue_white_presence'] > 0.10:
+                explanation += "  → Blue-white veil present (melanoma-specific sign)\n"
+            explanation += f"• Darkness ratio: {color_metrics.get('darkness_ratio', 0)*100:.1f}%\n"
+
         # Differential diagnosis
         sorted_indices = np.argsort(confidence_scores)[::-1]
         if len(sorted_indices) > 1 and confidence_scores[sorted_indices[1]] > 0.1:
             explanation += f"\n**Differential Consideration:**\n"
             explanation += f"• {diagnosis_names[sorted_indices[1]]}: "
             explanation += f"{confidence_scores[sorted_indices[1]]*100:.1f}%\n"
-        
-        # Risk assessment
-        if pred_index in [0, 1, 4]:  # Malignant conditions
-            explanation += f"\n**Clinical Recommendation:**\n"
-            explanation += "• Immediate dermatological consultation recommended\n"
-            explanation += "• Biopsy may be warranted for definitive diagnosis\n"
-        elif pred_index in [2, 3, 5]:  # Benign conditions
-            explanation += f"\n**Clinical Recommendation:**\n"
-            explanation += "• Regular monitoring recommended\n"
-            explanation += "• Consult dermatologist if changes occur\n"
-        
+
+        # Important disclaimer
+        explanation += f"\n**⚠️ Important Reminder:**\n"
+        explanation += "• This tool must NOT be used for self-diagnosis\n"
+        explanation += "• Always consult a qualified dermatologist for proper evaluation\n"
+        explanation += "• Only dermatologists are responsible for diagnosis and treatment decisions\n"
+        explanation += "• This is a decision support tool, not a diagnostic device\n"
+
         # Model reasoning transparency
         explanation += f"\n**Model Reasoning Transparency:**\n"
         explanation += f"• Decision based on pattern recognition of {features['dermoscopy'][0]}\n"
         explanation += f"• Confidence distribution indicates "
         explanation += f"{'high certainty' if confidence > 70 else 'moderate certainty'}\n"
-        
+
         return explanation
     
     @staticmethod
