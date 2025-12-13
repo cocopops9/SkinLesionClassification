@@ -105,9 +105,106 @@ def login_page():
             new_password = st.text_input("Password", type="password", key="reg_password",
                                         help="Minimum 8 characters")
             confirm_password = st.text_input("Confirm Password", type="password", key="reg_confirm")
-            
-            terms = st.checkbox("I understand this is a decision support system and that only dermatologists are responsible for diagnosis")
-            
+
+            # Comprehensive disclaimers section
+            st.markdown("---")
+            st.markdown("#### ⚠️ Terms of Use & Disclaimers")
+            st.markdown("**Please read and accept all disclaimers before registering:**")
+
+            with st.expander("📋 View Full Terms and Disclaimers", expanded=False):
+                st.markdown("""
+**1. Decision Support System Only**
+
+This application is a Clinical Decision Support System (CDSS) designed to assist
+qualified healthcare professionals. It is NOT a diagnostic device and should
+NEVER be used as the sole basis for clinical decisions.
+
+**2. Intended Users**
+
+This system is intended exclusively for:
+- Licensed dermatologists and healthcare professionals for clinical decision support
+- Medical researchers for academic and scientific research purposes
+- Medical students under qualified supervision for educational purposes
+
+**3. No Medical Advice**
+
+The classifications, predictions, and analyses provided by this system do NOT
+constitute medical advice, diagnosis, or treatment recommendations. All outputs
+are supplementary information only.
+
+**4. Professional Responsibility**
+
+Only qualified dermatologists and licensed healthcare professionals are responsible
+for patient diagnosis, treatment decisions, and clinical outcomes. The user assumes
+full responsibility for any clinical decisions made using this tool.
+
+**5. No Warranty or Guarantee**
+
+This system is provided "AS IS" without any warranty of any kind, express or implied.
+We make NO guarantees regarding:
+- Accuracy, completeness, or reliability of predictions
+- Suitability for any particular medical purpose
+- Error-free operation or uninterrupted availability
+
+**6. Limitation of Liability**
+
+Under no circumstances shall the developers, operators, or affiliated institutions
+be liable for any direct, indirect, incidental, special, consequential, or punitive
+damages arising from:
+- Use or inability to use this system
+- Any errors, inaccuracies, or omissions in the predictions
+- Clinical decisions made based on system outputs
+- Misdiagnosis, delayed diagnosis, or treatment outcomes
+- Data loss or security breaches
+
+**7. Not for Self-Diagnosis**
+
+This tool must NEVER be used for self-diagnosis by patients or non-medical
+professionals. Any individual concerned about skin lesions should consult a
+qualified dermatologist directly.
+
+**8. Data and Privacy**
+
+Uploaded images are stored for analysis purposes. Users are responsible for
+ensuring compliance with applicable patient privacy regulations (e.g., HIPAA,
+GDPR) when uploading patient data.
+
+**9. Research Use**
+
+For research purposes only: Results should be validated through appropriate
+scientific methods before publication or clinical application.
+
+**10. Regulatory Status**
+
+This system has NOT been evaluated, cleared, or approved by the FDA, EMA, or
+any other regulatory body as a medical device. It is not intended to replace
+approved diagnostic procedures.
+                """)
+
+            st.markdown("**By registering, you confirm that:**")
+
+            disclaimer1 = st.checkbox(
+                "I am a licensed dermatologist, healthcare professional, or researcher using this system for legitimate clinical decision support or research purposes",
+                key="disclaimer_user_type"
+            )
+
+            disclaimer2 = st.checkbox(
+                "I understand this is a Decision Support System only and NOT a diagnostic device - all clinical decisions remain my sole responsibility",
+                key="disclaimer_dss"
+            )
+
+            disclaimer3 = st.checkbox(
+                "I accept that there is NO WARRANTY on the accuracy of predictions and the developers assume NO LIABILITY for any clinical outcomes or damages",
+                key="disclaimer_liability"
+            )
+
+            disclaimer4 = st.checkbox(
+                "I have read and agree to all Terms of Use and Disclaimers listed above",
+                key="disclaimer_terms"
+            )
+
+            all_disclaimers_accepted = all([disclaimer1, disclaimer2, disclaimer3, disclaimer4])
+
             if st.button("Register", type="primary", use_container_width=True):
                 if not all([new_username, new_email, new_password, confirm_password]):
                     st.warning("Please fill all fields")
@@ -115,8 +212,8 @@ def login_page():
                     st.error("Passwords do not match")
                 elif len(new_password) < 8:
                     st.error("Password must be at least 8 characters")
-                elif not terms:
-                    st.warning("Please accept the terms")
+                elif not all_disclaimers_accepted:
+                    st.warning("Please accept all disclaimers to register. You must check all four boxes.")
                 else:
                     try:
                         user = DatabaseManager.create_user(new_username, new_password, new_email)
