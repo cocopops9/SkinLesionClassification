@@ -55,7 +55,7 @@ class MelanomaClassifier:
         3: {'name': 'DF', 'full': 'Dermatofibroma', 'type': 'Benign'},
         4: {'name': 'MEL', 'full': 'Melanoma', 'type': 'Malignant'},
         5: {'name': 'NV', 'full': 'Melanocytic nevus', 'type': 'Benign'},
-        6: {'name': 'VASC', 'full': 'Vascular lesion', 'type': 'Benign/Malignant'}
+        6: {'name': 'VASC', 'full': 'Vascular lesion', 'type': 'Indecidable'}
     }
     
     def __init__(self, models_dir: str = 'models'):
