@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-labelledby="title desc">
+  <title id="title">Training-time data augmentation</title>
+  <desc id="desc">Six tiles show the random transforms configured in train_config.py: rotation up to 40 degrees, shifts up to 20 percent, shear of 0.2 degrees, independent zoom between 0.8 and 1.2 on each axis, and horizontal and vertical flips.</desc>
+  <defs>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <path d="M24 0H0V24" fill="none" stroke="#30363d" stroke-width="0.6" opacity="0.45"/>
+    </pattern>
+    <radialGradient id="lesion" cx="45%" cy="45%" r="60%">
+      <stop offset="0" stop-color="#24140d"/>
+      <stop offset="1" stop-color="#8d5c42"/>
+    </radialGradient>
+    <g id="lesionShape">
+      <path d="M0 -42 C 26 -46, 46 -20, 42 6 C 40 28, 22 44, -2 44 C -26 44, -44 26, -42 2 C -40 -22, -24 -40, 0 -42 Z" fill="url(#lesion)"/>
+      <circle cx="18" cy="-14" r="8" fill="#140a06"/>
+      <circle cx="-16" cy="20" r="5" fill="#6b7fa6" opacity="0.7"/>
+    </g>
+    <clipPath id="c0"><rect x="30" y="80" width="150" height="150" rx="6"/></clipPath>
+    <clipPath id="c1"><rect x="225" y="80" width="150" height="150" rx="6"/></clipPath>
+    <clipPath id="c2"><rect x="420" y="80" width="150" height="150" rx="6"/></clipPath>
+    <clipPath id="c3"><rect x="615" y="80" width="150" height="150" rx="6"/></clipPath>
+    <clipPath id="c4"><rect x="810" y="80" width="150" height="150" rx="6"/></clipPath>
+    <clipPath id="c5"><rect x="1005" y="80" width="150" height="150" rx="6"/></clipPath>
+  </defs>
+  <style>
+    .t { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; fill: #e6edf3; }
+    .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .mut { fill: #8b949e; }
+    .a { transform-box: view-box; animation-duration: 6s; animation-iteration-count: infinite; animation-timing-function: ease-in-out; }
+    .rot { transform-origin: 300px 155px; animation-name: rot; }
+    .shift { transform-origin: 495px 155px; animation-name: shift; }
+    .shear { transform-origin: 690px 155px; animation-name: shear; }
+    .zoom { transform-origin: 885px 155px; animation-name: zoom; }
+    .flip { transform-origin: 1080px 155px; animation-name: flip; animation-timing-function: steps(1); }
+    @keyframes rot { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(40deg); } 75% { transform: rotate(-40deg); } }
+    @keyframes shift { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(30px, -18px); } 50% { transform: translate(-30px, 12px); } 75% { transform: translate(10px, 30px); } }
+    @keyframes shear { 0%, 100% { transform: skewX(0deg); } 25% { transform: skewX(0.2deg); } 75% { transform: skewX(-0.2deg); } }
+    @keyframes zoom { 0%, 100% { transform: scale(1, 1); } 25% { transform: scale(1.2, 0.8); } 50% { transform: scale(0.8, 0.8); } 75% { transform: scale(0.85, 1.2); } }
+    @keyframes flip { 0% { transform: scale(1, 1); } 25% { transform: scale(-1, 1); } 50% { transform: scale(-1, -1); } 75% { transform: scale(1, -1); } }
+    @media (prefers-reduced-motion: reduce) { .a { animation: none; } }
+  </style>
+
+  <rect width="1200" height="320" rx="14" fill="#0d1117"/>
+  <rect width="1200" height="320" rx="14" fill="url(#grid)"/>
+  <text x="30" y="40" class="t" font-size="20" font-weight="700">ImageDataGenerator augmentation (train_config.AUGMENTATION), sampled independently per image</text>
+  <text x="30" y="62" class="t mut" font-size="13">Validation and test generators apply only the preprocessing function. Areas uncovered by a transform are filled with the nearest edge pixel (fill_mode='nearest').</text>
+
+  <g clip-path="url(#c0)">
+    <rect x="30" y="80" width="150" height="150" fill="#d9a98d"/>
+    <use href="#lesionShape" x="105" y="155"/>
+  </g>
+  <g clip-path="url(#c1)">
+    <rect x="225" y="80" width="150" height="150" fill="#d9a98d"/>
+    <g class="a rot"><use href="#lesionShape" x="300" y="155"/></g>
+  </g>
+  <g clip-path="url(#c2)">
+    <rect x="420" y="80" width="150" height="150" fill="#d9a98d"/>
+    <g class="a shift"><use href="#lesionShape" x="495" y="155"/></g>
+  </g>
+  <g clip-path="url(#c3)">
+    <rect x="615" y="80" width="150" height="150" fill="#d9a98d"/>
+    <g class="a shear"><use href="#lesionShape" x="690" y="155"/></g>
+  </g>
+  <g clip-path="url(#c4)">
+    <rect x="810" y="80" width="150" height="150" fill="#d9a98d"/>
+    <g class="a zoom"><use href="#lesionShape" x="885" y="155"/></g>
+  </g>
+  <g clip-path="url(#c5)">
+    <rect x="1005" y="80" width="150" height="150" fill="#d9a98d"/>
+    <g class="a flip"><use href="#lesionShape" x="1080" y="155"/></g>
+  </g>
+
+  <g class="t" text-anchor="middle">
+    <text x="105" y="256" font-size="13" font-weight="700">original</text>
+    <text x="105" y="274" class="m mut" font-size="10.5">resized to 224 / 299</text>
+    <text x="300" y="256" font-size="13" font-weight="700">rotation</text>
+    <text x="300" y="274" class="m mut" font-size="10.5">rotation_range=40 → ±40°</text>
+    <text x="495" y="256" font-size="13" font-weight="700">shift</text>
+    <text x="495" y="274" class="m mut" font-size="10.5">width/height 0.2 → ±20 %</text>
+    <text x="690" y="256" font-size="13" font-weight="700">shear</text>
+    <text x="690" y="274" class="m mut" font-size="10.5">shear_range=0.2 → ±0.2°</text>
+    <text x="690" y="292" class="mut" font-size="10.5">Keras reads it in degrees: invisible</text>
+    <text x="885" y="256" font-size="13" font-weight="700">zoom</text>
+    <text x="885" y="274" class="m mut" font-size="10.5">zoom_range=0.2</text>
+    <text x="885" y="292" class="mut" font-size="10.5">[0.8, 1.2], x and y drawn apart</text>
+    <text x="1080" y="256" font-size="13" font-weight="700">flips</text>
+    <text x="1080" y="274" class="m mut" font-size="10.5">H and V, p = 0.5 each</text>
+  </g>
+</svg>

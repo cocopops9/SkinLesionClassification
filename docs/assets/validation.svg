@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="440" viewBox="0 0 1200 440" role="img" aria-labelledby="title desc">
+  <title id="title">Input validation gates</title>
+  <desc id="desc">Four example uploads pass through the three sequential checks of ImageValidator.validate_image: dimensions and aspect ratio, a minimum of 30 unique colours, and a binary CLIP zero-shot comparison. Only the skin photograph is accepted.</desc>
+  <defs>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <path d="M24 0H0V24" fill="none" stroke="#30363d" stroke-width="0.6" opacity="0.45"/>
+    </pattern>
+    <radialGradient id="lesion" cx="45%" cy="45%" r="60%">
+      <stop offset="0" stop-color="#24140d"/>
+      <stop offset="1" stop-color="#8d5c42"/>
+    </radialGradient>
+  </defs>
+  <style>
+    .t { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; fill: #e6edf3; }
+    .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .mut { fill: #8b949e; }
+    .card { animation-duration: 8s; animation-iteration-count: infinite; animation-timing-function: cubic-bezier(.45,.05,.3,1); }
+    .c1 { animation-name: c1; } .c2 { animation-name: c2; } .c3 { animation-name: c3; } .c4 { animation-name: c4; }
+    @keyframes c1 { 0% { transform: translateX(0); opacity: 0; } 5% { opacity: 1; } 45%, 90% { transform: translateX(990px); opacity: 1; } 97%, 100% { transform: translateX(990px); opacity: 0; } }
+    @keyframes c2 { 0% { transform: translateX(0); opacity: 0; } 5% { opacity: 1; } 45%, 90% { transform: translateX(470px); opacity: 1; } 97%, 100% { transform: translateX(470px); opacity: 0; } }
+    @keyframes c3 { 0% { transform: translateX(0); opacity: 0; } 5% { opacity: 1; } 45%, 90% { transform: translateX(250px); opacity: 1; } 97%, 100% { transform: translateX(250px); opacity: 0; } }
+    @keyframes c4 { 0% { transform: translateX(0); opacity: 0; } 5% { opacity: 1; } 45%, 90% { transform: translateX(690px); opacity: 1; } 97%, 100% { transform: translateX(690px); opacity: 0; } }
+    .verdict { animation: verdict 8s ease infinite; }
+    @keyframes verdict { 0%, 44% { opacity: 0; } 52%, 90% { opacity: 1; } 97%, 100% { opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) { .card, .verdict { animation: none; } }
+  </style>
+
+  <rect width="1200" height="440" rx="14" fill="#0d1117"/>
+  <rect width="1200" height="440" rx="14" fill="url(#grid)"/>
+  <text x="30" y="40" class="t" font-size="20" font-weight="700">ImageValidator.validate_image: three gates, first failure wins</text>
+
+  <!-- gates -->
+  <g class="t" text-anchor="middle">
+    <rect x="412" y="92" width="16" height="320" rx="4" fill="#21262d" stroke="#3d444d"/>
+    <text x="420" y="66" font-size="13" font-weight="700">1 · dimensions</text>
+    <text x="420" y="84" class="m mut" font-size="10.5">100 ≤ W,H ≤ 10000, ratio ≤ 5</text>
+    <rect x="632" y="92" width="16" height="320" rx="4" fill="#21262d" stroke="#3d444d"/>
+    <text x="640" y="66" font-size="13" font-weight="700">2 · simple graphic</text>
+    <text x="640" y="84" class="m mut" font-size="10.5">≥ 30 unique colours at 100×100</text>
+    <rect x="852" y="92" width="16" height="320" rx="4" fill="#21262d" stroke="#3d444d"/>
+    <text x="860" y="66" font-size="13" font-weight="700">3 · CLIP zero-shot</text>
+    <text x="860" y="84" class="m mut" font-size="10.5">p(skin prompt) ≥ 0.5</text>
+  </g>
+
+  <!-- lane 1: dermoscopic photo, accepted -->
+  <g class="card c1">
+    <rect x="40" y="104" width="120" height="66" rx="8" fill="#161b22" stroke="#3fb950"/>
+    <rect x="48" y="112" width="50" height="50" rx="4" fill="#d9a98d"/>
+    <ellipse cx="73" cy="137" rx="16" ry="13" fill="url(#lesion)"/>
+    <text x="104" y="132" class="t" font-size="11">lesion</text>
+    <text x="104" y="148" class="t m mut" font-size="9.5">640×480</text>
+  </g>
+  <g class="verdict t" font-size="12.5">
+    <text x="1036" y="190" style="fill:#3fb950">accepted</text>
+  </g>
+
+  <!-- lane 2: flat icon, rejected at gate 2 -->
+  <g class="card c2">
+    <rect x="40" y="184" width="120" height="66" rx="8" fill="#161b22" stroke="#f85149"/>
+    <rect x="48" y="192" width="50" height="50" rx="4" fill="#1f6feb"/>
+    <path d="M58 232 L73 202 L88 232 Z" fill="#ffffff"/>
+    <text x="104" y="212" class="t" font-size="11">icon</text>
+    <text x="104" y="228" class="t m mut" font-size="8.5">12 colours</text>
+  </g>
+  <g class="verdict t" font-size="12.5">
+    <text x="660" y="214" style="fill:#f85149">✗ "simple graphic</text>
+    <text x="660" y="232" style="fill:#f85149">(12 unique colors)"</text>
+  </g>
+
+  <!-- lane 3: thumbnail, rejected at gate 1 -->
+  <g class="card c3">
+    <rect x="40" y="264" width="120" height="66" rx="8" fill="#161b22" stroke="#f85149"/>
+    <rect x="60" y="284" width="24" height="24" rx="2" fill="#d9a98d"/>
+    <circle cx="72" cy="296" r="6" fill="#5a3423"/>
+    <text x="104" y="292" class="t" font-size="11">thumbnail</text>
+    <text x="104" y="308" class="t m mut" font-size="9.5">80×80</text>
+  </g>
+  <g class="verdict t" font-size="12.5">
+    <text x="440" y="294" style="fill:#f85149">✗ "Image too small</text>
+    <text x="440" y="312" style="fill:#f85149">(minimum 100x100)"</text>
+  </g>
+
+  <!-- lane 4: non-medical photo, rejected at gate 3 -->
+  <g class="card c4">
+    <rect x="40" y="344" width="120" height="66" rx="8" fill="#161b22" stroke="#f85149"/>
+    <rect x="48" y="352" width="50" height="50" rx="4" fill="#5b7f4a"/>
+    <path d="M60 372 L64 358 L70 368 L76 368 L82 358 L86 372 Z" fill="#9a8f84"/>
+    <circle cx="73" cy="382" r="13" fill="#9a8f84"/>
+    <text x="104" y="372" class="t" font-size="11">cat photo</text>
+    <text x="104" y="388" class="t m mut" font-size="9.5">1024×768</text>
+  </g>
+  <g class="verdict t" font-size="12.5">
+    <text x="880" y="374" style="fill:#f85149">✗ "Image may not be a</text>
+    <text x="880" y="392" style="fill:#f85149">valid skin lesion"</text>
+  </g>
+
+  <text x="30" y="432" class="t mut" font-size="12">If CLIP cannot be loaded, gate 3 is skipped and the image is accepted with the warning "CLIP not available - validation skipped".</text>
+</svg>

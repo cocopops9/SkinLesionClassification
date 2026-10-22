@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skin Lesion Lab</title>
+  <meta name="description" content="Interactive, chapter-by-chapter explanation of the Skin Lesion Classification project: validation, CNN classification, ensembling, Grad-CAM, occlusion sensitivity and ABCDE heuristics.">
+  <link rel="stylesheet" href="lab/lab.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23d9a98d'/%3E%3Ccircle cx='15' cy='16' r='8' fill='%235a3423'/%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">Skin Lesion Lab<small>interactive docs</small></div>
+      <nav class="rail" id="rail" aria-label="Chapters">
+        <a href="#overview">00 Overview</a>
+        <a href="#data">01 Labels</a>
+        <a href="#validation">02 Validation</a>
+        <a href="#preprocessing">03 Preprocessing</a>
+        <a href="#architecture">04 Architecture</a>
+        <a href="#training">05 Training</a>
+        <a href="#inference">06 Ensemble</a>
+        <a href="#gradcam">07 Grad-CAM</a>
+        <a href="#occlusion">08 Occlusion</a>
+        <a href="#abcde">09 ABCDE</a>
+        <a href="#storage">10 Storage</a>
+        <a href="#limits">11 Limits</a>
+      </nav>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle colour theme">theme</button>
+    </div>
+    <div class="progress" id="progress"></div>
+  </header>
+
+  <main>
+    <!-- ============================================================ 00 -->
+    <section class="hero" id="overview">
+      <h1>How a skin image becomes a decision-support report</h1>
+      <p class="lead">This lab follows one image through the Streamlit application, stage by stage. Every widget re-implements the exact rule used in the Python code, so what you see here is what the project computes. Where the browser cannot run a component (the CNNs and CLIP), the widget says so and works on explicit, labelled inputs instead.</p>
+      <figure>
+        <img src="assets/pipeline.svg" alt="Animated pipeline: upload, validate, preprocess, classify, fuse, explain, store">
+      </figure>
+      <div class="stage-chips">
+        <a href="#data"><b>01</b>labels and data</a>
+        <a href="#validation"><b>02</b>is it a skin image?</a>
+        <a href="#preprocessing"><b>03</b>pixels to tensors</a>
+        <a href="#architecture"><b>04</b>the networks</a>
+        <a href="#training"><b>05</b>how they were trained</a>
+        <a href="#inference"><b>06</b>one or more models vote</a>
+        <a href="#gradcam"><b>07</b>where the model looked</a>
+        <a href="#occlusion"><b>08</b>occlusion (not wired)</a>
+        <a href="#abcde"><b>09</b>ABCDE heuristics</a>
+        <a href="#storage"><b>10</b>accounts and history</a>
+        <a href="#limits"><b>11</b>what to keep in mind</a>
+      </div>
+      <div class="notice"><strong>Decision support only.</strong> The application assists dermatologists. It is not a diagnostic device and must not be used for self-diagnosis; only a qualified dermatologist is responsible for diagnosis and treatment.</div>
+    </section>
+
+    <!-- ============================================================ 01 -->
+    <section class="chapter" id="data">
+      <div class="chapter-head"><span class="chapter-num">01</span><h2>Labels and data</h2></div>
+      <p class="sub">Every model ends in a 7-way softmax whose indices are fixed by <code>CLASS_LABELS</code> in <code>classification.py</code>. Training folders are read by Keras in alphabetical order (AKIEC, BCC, BKL, DF, MEL, NV, VASC), which matches those indices.</p>
+
+      <div class="window">
+        <div class="window-bar"><i></i><i></i><i></i>classification.py · MelanomaClassifier.CLASS_LABELS</div>
+        <div class="window-body table-wrap"><table class="data" id="classTable"></table></div>
+      </div>
+      <p class="sub">Two different rules use these labels. The red <em>alert banner</em> and the "ALERT" line of the explanation fire for indices 0, 1 and 4. The history page counts a "Malignant finding" whenever the lesion-type string contains <code>Malignant</code>, which also includes VASC ("Malignant/Benign").</p>
+
+      <h3>Class imbalance and balanced class weights</h3>
+      <p class="sub">The models are meant for HAM10000 (Tschandl et al., 2018), whose classes are strongly imbalanced. <code>train.py</code> passes <code>compute_class_weight('balanced')</code> to <code>fit</code>, i.e. <code>w<sub>c</sub> = N / (K · N<sub>c</sub>)</code>, so each class contributes equally to the expected loss.</p>
+      <div class="window">
+        <div class="window-bar"><i></i><i></i><i></i>HAM10000 class counts (10,015 images)</div>
+        <div class="window-body">
+          <div class="seg" role="group" aria-label="Display">
+            <button type="button" class="on" data-ham="count">image count</button>
+            <button type="button" data-ham="weight">balanced weight</button>
+            <button type="button" data-ham="effective">count × weight</button>
+          </div>
+          <div class="bars" id="hamBars" style="margin-top:12px"></div>
+          <p class="sub" id="hamNote" style="margin-bottom:0"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ 02 -->
+    <section class="chapter" id="validation">
+      <div class="chapter-head"><span class="chapter-num">02</span><h2>Input validation: is this a skin image?</h2></div>
+      <p class="sub"><code>ImageValidator.validate_image</code> runs three checks in order and stops at the first failure. It runs on every upload, before the user presses "Analyze Image".</p>
+      <figure><img src="assets/validation.svg" alt="Animated validation gates"></figure>
+
+      <div class="grid-2">
+        <div class="window">
+          <div class="window-bar"><i></i><i></i><i></i>gate 1 · validate_image_dimensions</div>
+          <div class="window-body">
+            <div class="controls">
+              <div class="control"><label for="dimW">width (px)</label><input type="range" id="dimW" min="20" max="12000" value="640"><output id="dimWo"></output></div>
+              <div class="control"><label for="dimH">height (px)</label><input type="range" id="dimH" min="20" max="12000" value="480"><output id="dimHo"></output></div>
+            </div>
+            <p class="verdict" id="dimVerdict"></p>
+          </div>
+        </div>
+
+        <div class="window">
+          <div class="window-bar"><i></i><i></i><i></i>gate 3 · validate_with_clip (binary prompts)</div>
+          <div class="window-body">
+            <p style="margin-top:0;font-size:14px">CLIP ViT-B/32 embeds the image and two prompts. With unit-norm embeddings, the score of each prompt is a cosine similarity <code>s</code>; the code applies <code>softmax</code> directly to the two cosines.</p>
+            <div class="controls">
+              <div class="control"><label for="sMed">s(skin prompt)</label><input type="range" id="sMed" min="0.10" max="0.40" step="0.001" value="0.262"><output id="sMedo"></output></div>
+              <div class="control"><label for="sNon">s(non-medical)</label><input type="range" id="sNon" min="0.10" max="0.40" step="0.001" value="0.231"><output id="sNono"></output></div>
+            </div>
+            <div class="bars" id="clipBars" style="margin-top:10px"></div>
+            <p class="verdict" id="clipVerdict"></p>
+          </div>
+        </div>
+      </div>
+      <div class="callout warn"><strong>Calibration note.</strong> CLIP's own zero-shot recipe multiplies cosines by a learned logit scale (100) before the softmax. Without it, <code>p = σ(s<sub>skin</sub> − s<sub>non</sub>)</code> stays within about 0.47 to 0.53 for realistic cosine gaps, so the reported "confidence" carries little information. The accept or reject decision is unaffected, because <code>p ≥ 0.5</code> exactly when <code>s<sub>skin</sub> ≥ s<sub>non</sub></code> under either scaling.</div>
+
+      <div class="window">
+        <div class="window-bar"><i></i><i></i><i></i>try gates 1 and 2 on your own image (processed locally, never uploaded)</div>
+        <div class="window-body">
+          <div class="btn-row">
+            <label class="btn">choose image<input type="file" id="valFile" accept="image/*" hidden></label>
+            <button class="btn" type="button" id="valSynthetic">use synthetic lesion</button>
+            <button class="btn" type="button" id="valIcon">use flat icon</button>
+          </div>
+          <div class="canvas-row">
+            <div class="canvas-box"><canvas id="valCanvas" width="200" height="200"></canvas><span>input</span></div>
+            <div class="canvas-box"><canvas id="valSmall" class="pixelated" width="100" height="100" style="width:200px"></canvas><span>100×100 resize used for counting</span></div>
+            <div style="flex:1;min-width:240px" id="valReport" class="report">Choose an image or a preset.</div>
+          </div>
+          <p class="sub" style="margin-bottom:0">Gate 3 (CLIP) needs the ViT-B/32 weights (about 340 MB) and PyTorch and runs only in the Python app. The resize is only applied when the height exceeds 100 px, exactly as in the code.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ 03 -->
+    <section class="chapter" id="preprocessing">
+      <div class="chapter-head"><span class="chapter-num">03</span><h2>Preprocessing: pixels to tensors</h2></div>
+      <p class="sub"><code>MelanomaClassifier.preprocess_image</code> loads the file with Keras (PIL), resizes it to the backbone's input size, applies that backbone's <code>preprocess_input</code> and then divides by 255. <code>train.py</code> uses the same function, so training and inference agree.</p>
+      <pre><code>img = image.load_img(img_path, target_size=(img_size, img_size))
+img_array = preprocess_input(np.expand_dims(image.img_to_array(img), 0))
+img_array = img_array / 255.0</code></pre>
+      <div class="window">
+        <div class="window-bar"><i></i><i></i><i></i>follow one pixel value through the transform</div>
+        <div class="window-body">
+          <div class="seg" role="group" aria-label="Backbone" id="ppSeg">
+            <button type="button" class="on" data-pp="EfficientNetB3">EfficientNetB3</button>
+            <button type="button" data-pp="InceptionV3">InceptionV3</button>
+            <button type="button" data-pp="InceptionResNetV2">InceptionResNetV2</button>
+          </div>
+          <div class="controls" style="margin-top:12px">
+            <div class="control"><label for="ppVal">red value</label><input type="range" id="ppVal" min="0" max="255" value="200"><output id="ppValo"></output></div>
+          </div>
+          <div class="table-wrap"><table class="data" id="ppTable"></table></div>
+          <div id="ppNote" class="callout" style="margin-bottom:0"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ 04 -->
+    <section class="chapter" id="architecture">
+      <div class="chapter-head"><span class="chapter-num">04</span><h2>Network architecture</h2></div>
+      <p class="sub">Each model is an ImageNet backbone without its classifier, followed by the same small head. Click a layer to inspect it.</p>
+      <figure><img src="assets/architecture.svg" alt="Animated architecture diagram"></figure>
+      <div class="window">
+        <div class="window-bar"><i></i><i></i><i></i>layer inspector (shapes and counts measured with TensorFlow 2.20)</div>
+        <div class="window-body">
+          <div class="seg" role="group" aria-label="Backbone" id="archSeg">
+            <button type="button" class="on" data-arch="EfficientNetB3">EfficientNetB3</button>
+            <button type="button" data-arch="InceptionV3">InceptionV3</button>
+            <button type="button" data-arch="InceptionResNetV2">InceptionResNetV2</button>
+          </div>
+          <div class="layer-strip" id="layerStrip"></div>
+          <div class="card" id="layerInfo" style="box-shadow:none"></div>
+        </div>
+      </div>
+      <div class="grid-3">
+        <div class="card"><h3 style="margin-top:0">EfficientNetB3</h3><p class="sub" style="margin:0">Compound scaling of depth, width and resolution (Tan and Le, 2019); MBConv blocks with squeeze-and-excitation. Keras embeds input rescaling and normalisation layers inside the model.</p></div>
+        <div class="card"><h3 style="margin-top:0">InceptionV3</h3><p class="sub" style="margin:0">Parallel convolution branches with factorised kernels (Szegedy et al., 2016). Its last block, <code>mixed10</code>, concatenates four branches into 2048 channels.</p></div>
+        <div class="card"><h3 style="margin-top:0">InceptionResNetV2</h3><p class="sub" style="margin:0">Inception modules with residual connections (Szegedy et al., 2017); the deepest and largest of the three, 54.8 M parameters.</p></div>
+      </div>
+    </section>
+
+    <!-- ============================================================ 05 -->
+    <section class="chapter" id="training">
+      <div class="chapter-head"><span class="chapter-num">05</span><h2>Training: two-phase transfer learning</h2></div>
+      <p class="sub"><code>train.py</code> first trains only the new head on top of a frozen ImageNet backbone, then recompiles with a 10× smaller learning rate and fine-tunes every layer. Loss: categorical cross-entropy with balanced class weights; metrics: accuracy and AUC.</p>
+      <figure><img src="assets/training.svg" alt="Animated two-phase training curve"></figure>
+
+      <h3>Augmentation playground</h3>
+      <p class="sub">Each training image receives a fresh random transform. This widget samples parameters the way <code>ImageDataGenerator.get_random_transform</code> does and applies them with the same matrix composition (rotation · shift · shear · zoom about the centre, bilinear sampling, nearest-edge fill, then flips).</p>
+      <figure><img src="assets/augmentation.svg" alt="Animated augmentation examples"></figure>
+      <div class="window">
+        <div class="window-bar"><i></i><i></i><i></i>ImageDataGenerator · random_transform</div>
+        <div class="window-body">
+          <div class="grid-2">
+            <div>
+              <div class="controls">
+                <div class="control"><label for="augRot">rotation (°)</label><input type="range" id="augRot" min="-40" max="40" step="0.5" value="0"><output id="augRoto"></output></div>
+                <div class="control"><label for="augTx">height shift</label><input type="range" id="augTx" min="-0.2" max="0.2" step="0.005" value="0"><output id="augTxo"></output></div>
+                <div class="control"><label for="augTy">width shift</label><input type="range" id="augTy" min="-0.2" max="0.2" step="0.005" value="0"><output id="augTyo"></output></div>
+                <div class="control"><label for="augShear">shear (°)</label><input type="range" id="augShear" min="-0.2" max="0.2" step="0.01" value="0"><output id="augShearo"></output></div>
+                <div class="control"><label for="augZx">zoom (rows)</label><input type="range" id="augZx" min="0.8" max="1.2" step="0.01" value="1"><output id="augZxo"></output></div>
+                <div class="control"><label for="augZy">zoom (cols)</label><input type="range" id="augZy" min="0.8" max="1.2" step="0.01" value="1"><output id="augZyo"></output></div>
+              </div>
+              <div style="margin-top:10px">
+                <label class="check"><input type="checkbox" id="augFh"> horizontal flip</label>
+                <label class="check"><input type="checkbox" id="augFv"> vertical flip</label>
+              </div>
+              <div class="btn-row">
+                <button class="btn primary" type="button" id="augRandom">sample like Keras</button>
+                <button class="btn" type="button" id="augReset">identity</button>
+              </div>
+            </div>
+            <div class="canvas-row" style="justify-content:center">
+              <div class="canvas-box"><canvas id="augSrc" width="160" height="160"></canvas><span>original</span></div>
+              <div class="canvas-box"><canvas id="augDst" width="160" height="160"></canvas><span>augmented</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3>Callback simulator</h3>
+      <p class="sub">Type a sequence of validation losses and see what <code>ReduceLROnPlateau(factor=0.5, patience=5, min_lr=1e-7)</code> and <code>EarlyStopping(patience=10, restore_best_weights=True)</code> decide, using the Keras 3 rules (improvement thresholds: 1e-4 and 0 respectively).</p>
+      <div class="window">
+        <div class="window-bar"><i></i><i></i><i></i>train.py · get_callbacks</div>
+        <div class="window-body">
+          <div class="btn-row">
+            <div class="seg" role="group" aria-label="Phase" id="simPhase">
+              <button type="button" class="on" data-lr="0.0001" data-max="15">phase 1 (lr 1e-4, 15 epochs)</button>
+              <button type="button" data-lr="0.00001" data-max="30">phase 2 (lr 1e-5, 30 epochs)</button>
+            </div>
+            <button class="btn" type="button" data-preset="plateau">preset: plateau</button>
+            <button class="btn" type="button" data-preset="steady">preset: steady</button>
+            <button class="btn" type="button" data-preset="noisy">preset: noisy</button>
+          </div>
+          <label for="simInput" class="sr-only">validation losses</label>
+          <textarea id="simInput"></textarea>
+          <div class="table-wrap"><table class="data sim-table" id="simTable"></table></div>
+          <p class="sub" id="simSummary" style="margin-bottom:0"></p>
+        </div>
+      </div>
+      <div class="callout bad"><strong>Known issue in train.py.</strong> When <code>data/val/</code> does not exist, the validation generator is created from an <code>ImageDataGenerator</code> without <code>validation_split</code>, so <code>subset='validation'</code> selects <em>zero</em> images (verified with TensorFlow 2.20). Provide an explicit <code>data/val/</code> folder until this is fixed. Also, <code>--unfreeze-layers</code> has no effect: <code>model.layers[0]</code> is the input layer, so the code always unfreezes the whole model.</div>
+    </section>
+
+    <!-- ============================================================ 06 -->
+    <section class="chapter" id="inference">
+      <div class="chapter-head"><span class="chapter-num">06</span><h2>Inference and ensemble</h2></div>
+      <p class="sub">In "Single Model" mode the prediction is the argmax of one softmax vector. In "Ensemble" mode, <code>predict_ensemble</code> averages the selected models' vectors with weights proportional to the accuracies declared in <code>MODEL_CONFIGS</code> (0.85, 0.84, 0.79). The browser cannot run the CNNs, so here you set each model's output yourself and watch the app's logic react.</p>
+      <figure><img src="assets/ensemble.svg" alt="Animated accuracy-weighted ensemble"></figure>
+      <div class="window">
+        <div class="window-bar"><i></i><i></i><i></i>get_prediction_with_metadata · result panel</div>
+        <div class="window-body">
+          <div class="btn-row">
+            <label class="check"><input type="checkbox" data-model="EfficientNetB3" checked> EfficientNetB3 (85 %)</label>
+            <label class="check"><input type="checkbox" data-model="InceptionV3" checked> InceptionV3 (84 %)</label>
+            <label class="check"><input type="checkbox" data-model="InceptionResNetV2"> InceptionResNetV2 (79 %)</label>
+          </div>
+          <div class="btn-row">
+            <button class="btn" type="button" data-scenario="agree">scenario: models agree</button>
+            <button class="btn" type="button" data-scenario="disagree">scenario: models disagree</button>
+            <button class="btn" type="button" data-scenario="uncertain">scenario: flat outputs</button>
+            <button class="btn" type="button" data-scenario="random">random (Dirichlet)</button>
+          </div>
+          <div class="grid-2">
+            <div>
+              <div class="seg" role="group" aria-label="Edit model" id="ensEditSeg"></div>
+              <p class="sub" style="margin:8px 0">Drag to change the raw scores of the selected model; they are renormalised to sum to 1 like a softmax output.</p>
+              <div class="controls" id="ensSliders"></div>
+            </div>
+            <div>
+              <div id="ensAlert"></div>
+              <div class="metric-grid" id="ensMetrics"></div>
+              <h3 style="font-size:15px">Confidence Scores by Diagnosis</h3>
+              <div class="bars" id="ensBars"></div>
+              <div class="code-ref" id="ensFormula"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ 07 -->
+    <section class="chapter" id="gradcam">
+      <div class="chapter-head"><span class="chapter-num">07</span><h2>Grad-CAM: where did the model look?</h2></div>
+      <p class="sub">Grad-CAM (Selvaraju et al., 2017) weights each feature map of a convolutional layer by the average gradient of the class score with respect to it. <code>compute_gradcam</code> picks the last layer that is a <code>Conv2D</code>, a <code>SeparableConv2D</code> or has "conv" in its name.</p>
+      <pre><code>α_k = mean_ij ∂y_c / ∂A^k_ij          # pooled_grads
+L   = ReLU( Σ_k α_k A^k ) / max(...)    # heatmap in [0, 1]</code></pre>
+      <figure><img src="assets/gradcam.svg" alt="Animated Grad-CAM steps"></figure>
+      <div class="window">
+        <div class="window-bar"><i></i><i></i><i></i>toy Grad-CAM on a 7×7 grid · overlay_heatmap(alpha)</div>
+        <div class="window-body">
+          <div class="grid-2">
+            <div>
+              <div class="controls" id="gcSliders"></div>
+              <div class="controls" style="margin-top:12px">
+                <div class="control"><label for="gcAlpha">overlay alpha</label><input type="range" id="gcAlpha" min="0" max="1" step="0.05" value="0.4"><output id="gcAlphao"></output></div>
+              </div>
+              <div class="btn-row"><button class="btn" type="button" id="gcReset">reset α to pooled gradients</button></div>
+              <p class="verdict" id="gcVerdict"></p>
+            </div>
+            <div class="canvas-row">
+              <div class="canvas-box"><canvas id="gcSum" class="pixelated" width="7" height="7" style="width:140px"></canvas><span>Σ α<sub>k</sub> A<sup>k</sup> (signed)</span></div>
+              <div class="canvas-box"><canvas id="gcHeat" class="pixelated" width="7" height="7" style="width:140px"></canvas><span>ReLU ÷ max, JET</span></div>
+              <div class="canvas-box"><canvas id="gcOverlay" width="224" height="224" style="width:224px"></canvas><span>bilinear resize + overlay</span></div>
+            </div>
+          </div>
+          <div class="canvas-row" id="gcChannels" style="margin-top:10px"></div>
+        </div>
+      </div>
+      <div class="callout"><strong>What the app does exactly.</strong> The heatmap is computed with the <em>first</em> selected model only, for the class chosen by the (possibly ensembled) prediction, and saved as <code>heatmaps/&lt;id&gt;_heatmap.npy</code>. For InceptionV3 the auto-selected layer is <code>conv2d_93</code>, a 192-channel branch inside <code>mixed10</code>, not the full 2048-channel block output.</div>
+    </section>
+
+    <!-- ============================================================ 08 -->
+    <section class="chapter" id="occlusion">
+      <div class="chapter-head"><span class="chapter-num">08</span><h2>Occlusion sensitivity (implemented, not wired into the UI)</h2></div>
+      <p class="sub"><code>compute_occlusion_sensitivity</code> hides one square patch at a time and records how much the class probability drops. It is model-agnostic but needs one forward pass per patch position, which is probably why the app does not call it. Here a transparent toy scorer (template-weighted "brownness") stands in for the CNN, and the loop is ported exactly.</p>
+      <figure><img src="assets/occlusion.svg" alt="Animated occlusion scan"></figure>
+      <div class="window">
+        <div class="window-bar"><i></i><i></i><i></i>compute_occlusion_sensitivity(patch_size, stride)</div>
+        <div class="window-body">
+          <div class="grid-2">
+            <div>
+              <div class="seg" role="group" aria-label="Input size" id="occSize">
+                <button type="button" class="on" data-size="224">224 px (EfficientNetB3)</button>
+                <button type="button" data-size="299">299 px (Inception)</button>
+              </div>
+              <div class="controls" style="margin-top:12px">
+                <div class="control"><label for="occPatch">patch_size</label><input type="range" id="occPatch" min="8" max="96" step="4" value="32"><output id="occPatcho"></output></div>
+                <div class="control"><label for="occStride">stride</label><input type="range" id="occStride" min="8" max="64" step="4" value="16"><output id="occStrideo"></output></div>
+              </div>
+              <div class="btn-row"><button class="btn primary" type="button" id="occRun">animate scan</button></div>
+              <p class="verdict" id="occStats"></p>
+            </div>
+            <div class="canvas-row">
+              <div class="canvas-box"><canvas id="occImg" width="224" height="224" style="width:224px"></canvas><span>input with moving patch</span></div>
+              <div class="canvas-box"><canvas id="occRaw" class="pixelated" width="14" height="14" style="width:224px"></canvas><span>raw grid (dashed cells are never visited)</span></div>
+              <div class="canvas-box"><canvas id="occMap" width="224" height="224" style="width:224px"></canvas><span>resized + min-max normalised</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ 09 -->
+    <section class="chapter" id="abcde">
+      <div class="chapter-head"><span class="chapter-num">09</span><h2>ABCDE heuristics</h2></div>
+      <p class="sub">Dermatologists use Asymmetry, Border, Colour, Diameter and Evolution as a melanoma screening rule. <code>compute_abcde_criteria</code> derives four of them from the image with classical image processing and prints them in the report. This lab runs a port of those functions that reproduces the Python results (Otsu threshold, contour area and perimeter, bounding box and A, B, C, D scores matched on 16 test images).</p>
+      <figure><img src="assets/abcde.svg" alt="Animated ABCDE computation on a synthetic lesion"></figure>
+      <div class="window">
+        <div class="window-bar"><i></i><i></i><i></i>compute_abcde_criteria · live</div>
+        <div class="window-body">
+          <div class="grid-2">
+            <div>
+              <div class="btn-row">
+                <label class="btn">choose image<input type="file" id="abFile" accept="image/*" hidden></label>
+                <button class="btn" type="button" id="abSynth">synthetic lesion</button>
+              </div>
+              <div class="controls" id="abSynthControls">
+                <div class="control"><label for="abRadius">lesion radius</label><input type="range" id="abRadius" min="0.08" max="0.45" step="0.01" value="0.27"><output id="abRadiuso"></output></div>
+                <div class="control"><label for="abIrreg">irregularity</label><input type="range" id="abIrreg" min="0" max="0.4" step="0.01" value="0.16"><output id="abIrrego"></output></div>
+                <div class="control"><label for="abDark">lesion darkness</label><input type="range" id="abDark" min="0" max="1" step="0.01" value="0.7"><output id="abDarko"></output></div>
+                <div class="control"><label for="abSkin">skin brightness</label><input type="range" id="abSkin" min="0.3" max="1" step="0.01" value="0.85"><output id="abSkino"></output></div>
+                <div class="control"><label for="abOffset">horizontal offset</label><input type="range" id="abOffset" min="-0.25" max="0.25" step="0.01" value="0"><output id="abOffseto"></output></div>
+              </div>
+              <label class="check" style="margin-top:10px"><input type="checkbox" id="abInvert"> also measure the dark region (THRESH_BINARY_INV, <em>not</em> in the code)</label>
+            </div>
+            <div>
+              <div class="canvas-row">
+                <div class="canvas-box"><canvas id="abImg" width="240" height="240" style="width:240px"></canvas><span>input</span></div>
+                <div class="canvas-box"><canvas id="abMask" width="240" height="240" style="width:240px"></canvas><span>mask: white = gray &gt; T · cyan = largest contour</span></div>
+              </div>
+              <canvas id="abHist" width="512" height="90" style="width:100%;max-width:512px;margin-top:8px"></canvas>
+            </div>
+          </div>
+          <div class="report" id="abReport" style="margin-top:12px"></div>
+          <div class="report" id="abInvReport" style="margin-top:8px;display:none"></div>
+        </div>
+      </div>
+      <div class="callout bad"><strong>Read the scores as image-level heuristics.</strong> <code>cv2.THRESH_BINARY</code> marks pixels <em>brighter</em> than the Otsu threshold as foreground. On a dark lesion over lighter skin, the largest external contour is therefore usually the skin region, often bounded by the image frame. Then D measures the image (at an assumed 10 px/mm), B measures the frame shape, and A compares the whole image with its mirror. Toggle the inverted mask above to see how different the lesion's own measurements would be.</div>
+    </section>
+
+    <!-- ============================================================ 10 -->
+    <section class="chapter" id="storage">
+      <div class="chapter-head"><span class="chapter-num">10</span><h2>Accounts, storage and history</h2></div>
+      <p class="sub">Users register and log in on the first page. Passwords are hashed with bcrypt; each analysis is stored as a row in a local SQLite database through SQLAlchemy, and files are kept under <code>user_uploads/&lt;user_id&gt;/</code>.</p>
+      <div class="grid-2">
+        <div class="window">
+          <div class="window-bar"><i></i><i></i><i></i>database.py · User.set_password</div>
+          <div class="window-body">
+            <p style="margin-top:0;font-size:14px">A bcrypt hash produced by <code>bcrypt.hashpw(password, bcrypt.gensalt())</code> (default cost 12) for the test password used by <code>test_system.py</code>. Hover over each part.</p>
+            <p class="report" id="bcryptHash" style="font-size:15px"></p>
+            <p class="sub" id="bcryptPart" style="margin-bottom:0">Each part of the string is explained here.</p>
+          </div>
+        </div>
+        <div class="window">
+          <div class="window-bar"><i></i><i></i><i></i>images table · row that would be saved</div>
+          <div class="window-body">
+            <p style="margin-top:0;font-size:14px">Built live from your choices in chapters 06 and 09, with the same keys as <code>analysis_page</code> passes to <code>save_image_record</code>.</p>
+            <pre><code id="recordJson"></code></pre>
+          </div>
+        </div>
+      </div>
+      <div class="window">
+        <div class="window-bar"><i></i><i></i><i></i>ExplainabilityEngine.generate_explanation · explanation_text</div>
+        <div class="window-body">
+          <p style="margin-top:0;font-size:14px">The report text the app would render for the prediction of chapter 06 and the image of chapter 09 (the app prints a warning emoji where this shows [warning icon]).</p>
+          <div class="report" id="explainText"></div>
+        </div>
+      </div>
+      <div class="table-wrap card" style="margin-top:18px">
+        <table class="data">
+          <tr><th>table</th><th>columns</th><th>notes</th></tr>
+          <tr><td class="mono">users</td><td class="mono">id (UUID), username (unique), password_hash, email (unique), created_at, last_login, is_active</td><td>username ≥ 3 characters, password ≥ 8, email must contain "@"</td></tr>
+          <tr><td class="mono">images</td><td class="mono">id, user_id → users.id, filename, file_path, upload_time, diagnosis, lesion_type, confidence_scores (JSON), model_used, explanation_text, feature_importance (unused), heatmap_path, is_valid_skin_image, validation_message, processing_time, image_width, image_height</td><td>history shows the 50 most recent rows; rename and delete act on one row</td></tr>
+        </table>
+      </div>
+      <div class="callout"><strong>Session model.</strong> Authentication state lives in Streamlit's <code>st.session_state</code> for the browser session; logging out clears it. There is no email verification, password reset or rate limiting, which is acceptable for a local demo but not for a deployment.</div>
+    </section>
+
+    <!-- ============================================================ 11 -->
+    <section class="chapter" id="limits">
+      <div class="chapter-head"><span class="chapter-num">11</span><h2>Limitations and verification notes</h2></div>
+      <p class="sub">These points were checked against the source code and, where stated, by running it. They define how far the output of the app can be trusted.</p>
+      <div class="table-wrap card">
+        <table class="data">
+          <tr><th>topic</th><th>finding</th><th>evidence</th></tr>
+          <tr><td>model accuracy</td><td>0.85 / 0.84 / 0.79 are constants in <code>MODEL_CONFIGS</code>; the repository contains no evaluation run, test split or confusion matrix that reproduces them.</td><td>source</td></tr>
+          <tr><td>weights provenance</td><td>Weights are downloaded from Google Drive; how they were trained is not recorded.</td><td>source</td></tr>
+          <tr><td>EfficientNet scaling</td><td>Keras builds an extra <code>Rescaling(1/√σ)</code> layer only when <code>weights='imagenet'</code>. Weights trained with <code>train.py</code> under current Keras therefore see differently scaled inputs at inference (factor ≈ 0.48).</td><td>Keras 3.15 source</td></tr>
+          <tr><td>CLIP probability</td><td>Softmax without logit scale: probabilities cluster near 0.5; decision equals sign of the cosine gap.</td><td>source + math</td></tr>
+          <tr><td>ABCDE</td><td>Bright-region foreground, fixed 10 px/mm, whole-image asymmetry. On all ten images in <code>media/</code> the measured contour touches the image border.</td><td>run on media/</td></tr>
+          <tr><td>Grad-CAM</td><td>First selected model only; InceptionV3 uses a single 192-channel branch; no epsilon in the normalisation.</td><td>TF 2.20 run</td></tr>
+          <tr><td>training split</td><td>Auto split yields 0 validation images; <code>--unfreeze-layers</code> is ignored.</td><td>TF 2.20 run</td></tr>
+          <tr><td>non-RGB uploads</td><td>The explanation step uses the raw upload array: for an RGBA PNG the alpha channel enters the colour variance (inflating C); a single-channel greyscale image makes the OpenCV colour conversion raise an error.</td><td>run</td></tr>
+          <tr><td>file storage</td><td>The upload is written to disk with a new UUID on every Streamlit rerun of the page, so one analysis can leave several copies in <code>user_uploads/</code>.</td><td>source</td></tr>
+          <tr><td>timing</td><td>"Total processing time" measures the classification call only, not validation or explanation.</td><td>source</td></tr>
+        </table>
+      </div>
+      <h3>References</h3>
+      <ul class="sub" style="max-width:none">
+        <li>Tschandl P., Rosendahl C., Kittler H. (2018). The HAM10000 dataset. <em>Scientific Data</em> 5, 180161.</li>
+        <li>Tan M., Le Q. (2019). EfficientNet: Rethinking model scaling for CNNs. <em>ICML</em>.</li>
+        <li>Szegedy C. et al. (2016). Rethinking the Inception architecture for computer vision. <em>CVPR</em>.</li>
+        <li>Szegedy C. et al. (2017). Inception-v4, Inception-ResNet and the impact of residual connections on learning. <em>AAAI</em>.</li>
+        <li>Radford A. et al. (2021). Learning transferable visual models from natural language supervision (CLIP). <em>ICML</em>.</li>
+        <li>Selvaraju R. R. et al. (2017). Grad-CAM: Visual explanations from deep networks via gradient-based localization. <em>ICCV</em>.</li>
+        <li>Zeiler M. D., Fergus R. (2014). Visualizing and understanding convolutional networks (occlusion analysis). <em>ECCV</em>.</li>
+        <li>Otsu N. (1979). A threshold selection method from gray-level histograms. <em>IEEE Trans. SMC</em> 9(1).</li>
+        <li>Suzuki S., Abe K. (1985). Topological structural analysis of digitized binary images by border following. <em>CVGIP</em> 30(1).</li>
+        <li>Provos N., Mazières D. (1999). A future-adaptable password scheme (bcrypt). <em>USENIX ATC</em>.</li>
+      </ul>
+      <footer>
+        Source: <a href="https://github.com/cocopops9/SkinLesionClassification">github.com/cocopops9/SkinLesionClassification</a> · Markdown chapters: <a href="https://github.com/cocopops9/SkinLesionClassification/tree/main/docs">docs/</a> · Everything on this page runs locally in your browser; chosen images are never uploaded.
+      </footer>
+    </section>
+  </main>
+
+  <script src="lab/heuristics.js"></script>
+  <script src="lab/lab.js"></script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">End-to-end analysis pipeline</title>
+  <desc id="desc">A packet travels through seven stages of app.py analysis_page: upload, validation, preprocessing, classification, fusion, explanation and storage. A dashed branch shows that a rejected image can still be analysed after the user confirms it.</desc>
+  <defs>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <path d="M24 0H0V24" fill="none" stroke="#30363d" stroke-width="0.6" opacity="0.45"/>
+    </pattern>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#7ee8ef"/>
+      <stop offset="0.45" stop-color="#39d0d8" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#39d0d8" stop-opacity="0"/>
+    </radialGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#8b949e"/>
+    </marker>
+  </defs>
+  <style>
+    .t { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; fill: #e6edf3; }
+    .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .mut { fill: #8b949e; }
+    .node { animation: node 10.5s ease infinite; }
+    @keyframes node { 0% { fill: #161b22; stroke: #30363d; } 3%, 14% { fill: #0f2f4f; stroke: #58a6ff; } 22%, 100% { fill: #161b22; stroke: #30363d; } }
+    .branch { animation: branch 10.5s ease infinite; }
+    @keyframes branch { 0%, 14% { stroke: #484f58; } 17%, 30% { stroke: #d29922; } 36%, 100% { stroke: #484f58; } }
+    @media (prefers-reduced-motion: reduce) { .node, .branch { animation: none; } .packet { display: none; } }
+  </style>
+
+  <rect width="1200" height="360" rx="14" fill="#0d1117"/>
+  <rect width="1200" height="360" rx="14" fill="url(#grid)"/>
+  <text x="30" y="44" class="t" font-size="20" font-weight="700">What happens to one uploaded image</text>
+  <text x="30" y="68" class="t mut" font-size="13">app.py · analysis_page(): validation runs as soon as the file is uploaded; stages 3 to 7 run when "Analyze Image" is pressed.</text>
+
+  <line x1="90" y1="153" x2="1110" y2="153" stroke="#30363d" stroke-width="3"/>
+  <circle class="packet" r="13" fill="url(#glow)">
+    <animateMotion dur="10.5s" repeatCount="indefinite" path="M90 153 H1110" keyPoints="0;1;1" keyTimes="0;0.857;1" calcMode="linear"/>
+  </circle>
+
+  <g class="t" text-anchor="middle">
+    <rect class="node" style="animation-delay: 0s" x="15" y="110" width="150" height="86" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <text x="90" y="136" font-size="15" font-weight="700">1 · Upload</text>
+    <text x="90" y="160" class="m mut" font-size="11">st.file_uploader</text>
+    <text x="90" y="178" class="m mut" font-size="11">jpg jpeg png bmp</text>
+
+    <rect class="node" style="animation-delay: 1.5s" x="185" y="110" width="150" height="86" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <text x="260" y="136" font-size="15" font-weight="700">2 · Validate</text>
+    <text x="260" y="160" class="m mut" font-size="11">size, colours,</text>
+    <text x="260" y="178" class="m mut" font-size="11">CLIP ViT-B/32</text>
+
+    <rect class="node" style="animation-delay: 3s" x="355" y="110" width="150" height="86" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <text x="430" y="136" font-size="15" font-weight="700">3 · Preprocess</text>
+    <text x="430" y="160" class="m mut" font-size="11">resize 224 / 299</text>
+    <text x="430" y="178" class="m mut" font-size="11">preprocess ÷ 255</text>
+
+    <rect class="node" style="animation-delay: 4.5s" x="525" y="110" width="150" height="86" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <text x="600" y="136" font-size="15" font-weight="700">4 · Classify</text>
+    <text x="600" y="160" class="m mut" font-size="11">1 to 3 CNNs</text>
+    <text x="600" y="178" class="m mut" font-size="11">7-way softmax</text>
+
+    <rect class="node" style="animation-delay: 6s" x="695" y="110" width="150" height="86" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <text x="770" y="136" font-size="15" font-weight="700">5 · Fuse</text>
+    <text x="770" y="160" class="m mut" font-size="11">single model or</text>
+    <text x="770" y="178" class="m mut" font-size="11">weighted mean</text>
+
+    <rect class="node" style="animation-delay: 7.5s" x="865" y="110" width="150" height="86" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <text x="940" y="136" font-size="15" font-weight="700">6 · Explain</text>
+    <text x="940" y="160" class="m mut" font-size="11">Grad-CAM (1st</text>
+    <text x="940" y="178" class="m mut" font-size="11">model) + ABCDE</text>
+
+    <rect class="node" style="animation-delay: 9s" x="1035" y="110" width="150" height="86" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <text x="1110" y="136" font-size="15" font-weight="700">7 · Store</text>
+    <text x="1110" y="160" class="m mut" font-size="11">SQLite record</text>
+    <text x="1110" y="178" class="m mut" font-size="11">heatmap .npy</text>
+  </g>
+
+
+  <!-- rejection branch -->
+  <path class="branch" d="M260 196 V262 H300" fill="none" stroke="#484f58" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+  <rect x="304" y="236" width="432" height="54" rx="8" fill="#1c1a12" stroke="#5c4a12"/>
+  <text x="318" y="258" class="t" font-size="13" style="fill:#e3b341">Rejected: the validation report is shown as an error.</text>
+  <text x="318" y="278" class="t mut" font-size="12.5">Ticking "I confirm this is a valid skin lesion image" enables analysis.</text>
+  <path class="branch" d="M736 263 H780 V218 H430 V200" fill="none" stroke="#484f58" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+
+  <text x="30" y="330" class="t mut" font-size="12.5">Without confirmation, pressing "Analyze Image" stores an invalid-image record (when "Save to History" is on) and stops.</text>
+</svg>

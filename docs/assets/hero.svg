@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-labelledby="title desc">
+  <title id="title">Skin Lesion Classification</title>
+  <desc id="desc">Animated banner. A dermoscopic image is scanned, a Grad-CAM overlay rendered with the JET colormap at alpha 0.4 appears, and the seven HAM10000 class probabilities fill in. Probability values are illustrative.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d1117"/>
+      <stop offset="1" stop-color="#151b26"/>
+    </linearGradient>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <path d="M24 0H0V24" fill="none" stroke="#30363d" stroke-width="0.6" opacity="0.45"/>
+    </pattern>
+    <radialGradient id="skin" cx="50%" cy="42%" r="75%">
+      <stop offset="0" stop-color="#ecc7ab"/>
+      <stop offset="1" stop-color="#c38f74"/>
+    </radialGradient>
+    <radialGradient id="lesion" cx="44%" cy="46%" r="62%">
+      <stop offset="0" stop-color="#24140d"/>
+      <stop offset="0.55" stop-color="#4f2d1f"/>
+      <stop offset="1" stop-color="#8d5c42"/>
+    </radialGradient>
+    <radialGradient id="jet" cx="47%" cy="48%" r="62%">
+      <stop offset="0" stop-color="#8f0000"/>
+      <stop offset="0.14" stop-color="#ff0000"/>
+      <stop offset="0.34" stop-color="#ffff00"/>
+      <stop offset="0.5" stop-color="#7fff7f"/>
+      <stop offset="0.66" stop-color="#00ffff"/>
+      <stop offset="0.86" stop-color="#0000ff"/>
+      <stop offset="1" stop-color="#00008f"/>
+    </radialGradient>
+    <linearGradient id="beam" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#39d0d8" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#39d0d8" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#39d0d8" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="imgclip">
+      <rect x="40" y="70" width="240" height="240" rx="6"/>
+    </clipPath>
+  </defs>
+  <style>
+    .t { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; fill: #e6edf3; }
+    .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .mut { fill: #8b949e; }
+    .beam { opacity: 0; animation: beam 9s ease-in-out infinite; }
+    .heat { animation: heat 9s ease infinite; }
+    .bar { transform-box: fill-box; transform-origin: 0 50%; animation: bar 9s cubic-bezier(.2,.8,.2,1) infinite; }
+    .val { animation: val 9s ease infinite; }
+    .chip { animation: chip 9s ease infinite; }
+    @keyframes beam { 0% { transform: translateY(-30px); opacity: 0; } 4% { opacity: 1; } 30% { transform: translateY(240px); opacity: 1; } 34%, 100% { transform: translateY(240px); opacity: 0; } }
+    @keyframes heat { 0%, 28% { opacity: 0; } 42%, 88% { opacity: 1; } 96%, 100% { opacity: 0; } }
+    @keyframes bar { 0%, 38% { transform: scaleX(0); } 56%, 88% { transform: scaleX(1); } 96%, 100% { transform: scaleX(0); } }
+    @keyframes val { 0%, 52% { opacity: 0; } 60%, 88% { opacity: 1; } 96%, 100% { opacity: 0; } }
+    @keyframes chip { 0% { fill: #161b22; stroke: #30363d; } 4%, 22% { fill: #0f2f4f; stroke: #58a6ff; } 30%, 100% { fill: #161b22; stroke: #30363d; } }
+    @media (prefers-reduced-motion: reduce) { .beam, .heat, .bar, .val, .chip { animation: none; } }
+  </style>
+
+  <rect width="1200" height="340" rx="14" fill="url(#bg)"/>
+  <rect width="1200" height="340" rx="14" fill="url(#grid)"/>
+
+  <!-- image window -->
+  <g>
+    <rect x="20" y="20" width="280" height="306" rx="10" fill="#161b22" stroke="#30363d"/>
+    <circle cx="38" cy="38" r="5" fill="#f85149"/>
+    <circle cx="54" cy="38" r="5" fill="#d29922"/>
+    <circle cx="70" cy="38" r="5" fill="#3fb950"/>
+    <text x="86" y="42" class="t m mut" font-size="11">uploaded image</text>
+    <g clip-path="url(#imgclip)">
+      <rect x="40" y="70" width="240" height="240" fill="url(#skin)"/>
+      <path d="M160 120 C 196 112, 232 140, 228 178 C 226 206, 210 232, 178 244 C 150 254, 112 246, 98 218 C 84 190, 92 160, 112 140 C 126 126, 140 122, 160 120 Z" fill="url(#lesion)"/>
+      <circle cx="146" cy="170" r="9" fill="#6b7fa6" opacity="0.55"/>
+      <circle cx="186" cy="200" r="6" fill="#1a0e09" opacity="0.8"/>
+      <g class="heat"><rect x="40" y="70" width="240" height="240" fill="url(#jet)" opacity="0.4"/></g>
+      <rect class="beam" x="40" y="70" width="240" height="26" fill="url(#beam)"/>
+    </g>
+  </g>
+
+  <!-- title block -->
+  <text x="340" y="100" class="t" font-size="34" font-weight="700">Skin Lesion Classification</text>
+  <text x="342" y="134" class="t mut" font-size="15.5">Decision support on the 7 HAM10000 diagnostic classes</text>
+  <text x="342" y="160" class="t mut" font-size="14.5">3 CNN backbones · CLIP input gate · Grad-CAM · ABCDE</text>
+
+  <g class="t m" font-size="13">
+    <rect class="chip" x="342" y="200" width="104" height="30" rx="15" fill="#161b22" stroke="#30363d"/>
+    <text x="394" y="220" text-anchor="middle">validate</text>
+    <rect class="chip" style="animation-delay: 1.4s" x="458" y="200" width="104" height="30" rx="15" fill="#161b22" stroke="#30363d"/>
+    <text x="510" y="220" text-anchor="middle">classify</text>
+    <rect class="chip" style="animation-delay: 2.8s" x="574" y="200" width="104" height="30" rx="15" fill="#161b22" stroke="#30363d"/>
+    <text x="626" y="220" text-anchor="middle">explain</text>
+    <rect class="chip" style="animation-delay: 4.2s" x="690" y="200" width="104" height="30" rx="15" fill="#161b22" stroke="#30363d"/>
+    <text x="742" y="220" text-anchor="middle">store</text>
+  </g>
+  <text x="342" y="276" class="t mut" font-size="13">Streamlit · TensorFlow/Keras · CLIP · SQLite · bcrypt</text>
+  <text x="342" y="300" class="t" font-size="13" style="fill:#d29922">Not a diagnostic device: a dermatologist decides.</text>
+
+  <!-- probability window -->
+  <g>
+    <rect x="820" y="20" width="360" height="306" rx="10" fill="#161b22" stroke="#30363d"/>
+    <circle cx="838" cy="38" r="5" fill="#f85149"/>
+    <circle cx="854" cy="38" r="5" fill="#d29922"/>
+    <circle cx="870" cy="38" r="5" fill="#3fb950"/>
+    <text x="886" y="42" class="t m mut" font-size="11">softmax output (illustrative values)</text>
+    <g class="t m" font-size="12">
+      <text x="840" y="84">MEL</text>
+      <rect class="bar" style="animation-delay: 0s" x="896" y="73" width="186" height="14" rx="3" fill="#f85149"/>
+      <text class="val" x="1090" y="84">0.62</text>
+      <text x="840" y="118">NV</text>
+      <rect class="bar" style="animation-delay: .08s" x="896" y="107" width="63" height="14" rx="3" fill="#58a6ff"/>
+      <text class="val" x="967" y="118">0.21</text>
+      <text x="840" y="152">BKL</text>
+      <rect class="bar" style="animation-delay: .16s" x="896" y="141" width="24" height="14" rx="3" fill="#58a6ff"/>
+      <text class="val" x="928" y="152">0.08</text>
+      <text x="840" y="186">BCC</text>
+      <rect class="bar" style="animation-delay: .24s" x="896" y="175" width="12" height="14" rx="3" fill="#f85149"/>
+      <text class="val" x="916" y="186">0.04</text>
+      <text x="840" y="220">AKIEC</text>
+      <rect class="bar" style="animation-delay: .32s" x="896" y="209" width="9" height="14" rx="3" fill="#f85149"/>
+      <text class="val" x="913" y="220">0.03</text>
+      <text x="840" y="254">DF</text>
+      <rect class="bar" style="animation-delay: .40s" x="896" y="243" width="3" height="14" rx="1.5" fill="#58a6ff"/>
+      <text class="val" x="907" y="254">0.01</text>
+      <text x="840" y="288">VASC</text>
+      <rect class="bar" style="animation-delay: .48s" x="896" y="277" width="3" height="14" rx="1.5" fill="#58a6ff"/>
+      <text class="val" x="907" y="288">0.01</text>
+    </g>
+    <text x="840" y="314" class="t mut" font-size="10.5">red = classes that raise the in-app alert (AKIEC, BCC, MEL)</text>
+  </g>
+</svg>
